@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#080b17" />
+    <meta
+      name="description"
+      content="GRAM 数字典藏平台移动端演示原型：探索数字藏品、铸造池与账户设置。"
+    />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <title>GRAM · 数字典藏平台</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="./app.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="#home" data-page-link="home" aria-label="GRAM 首页">
+          <span class="brand-mark" aria-hidden="true">G</span>
+          <span class="brand-copy">
+            <span class="brand-name">GRAM</span>
+            <span class="brand-caption">DIGITAL COLLECTIBLES</span>
+          </span>
+        </a>
+        <div class="topbar-actions">
+          <span class="demo-pill"><span></span>演示模式</span>
+          <button class="theme-toggle" type="button" data-theme-toggle aria-label="切换到白色模式" title="切换主题">
+            <svg class="sun-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" />
+            </svg>
+            <svg class="moon-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M20.2 15.1A8.5 8.5 0 0 1 8.9 3.8 8.5 8.5 0 1 0 20.2 15.1Z" />
+            </svg>
+          </button>
+          <button class="icon-button" type="button" aria-label="打开通知">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" />
+            </svg>
+            <i></i>
+          </button>
+        </div>
+      </header>
+
+      <main>
+        <section class="page-content home-page is-visible" data-page-panel="home" aria-labelledby="home-heading">
+          <div class="home-hero">
+            <div class="section-kicker">YOUR DIGITAL UNIVERSE</div>
+            <h1 id="home-heading">发现数字藏品<span class="heading-period">.</span></h1>
+            <p class="section-description">探索藏品宇宙，开启你的 GRAM 旅程</p>
+            <div class="hero-orb" aria-hidden="true"><span>G</span><i></i><b></b></div>
+            <button class="hero-cta" type="button" data-page-link="mint">进入铸造池 <span>↗</span></button>
+            <span class="hero-caption">COLLECT · MINT · DISCOVER</span>
+          </div>
+          <section class="home-balance glass-panel" aria-label="账户资产概览">
+            <div><span class="eyebrow"><span class="live-dot"></span>演示账户余额</span><strong><span class="balance-coin">G</span><span data-wallet-balance>1,280</span> <small>GRAM</small></strong></div>
+            <button type="button" class="text-link" data-page-link="profile">查看账户 ↗</button>
+          </section>
+          <div class="activity-heading home-section-heading">
+            <div><div class="section-kicker">EXPLORE</div><h2>快速探索</h2></div><span class="home-count">01 — 03</span>
+          </div>
+          <div class="home-shortcuts">
+            <button class="shortcut-card mint-shortcut" type="button" data-page-link="mint"><span class="shortcut-icon">✳</span><strong>铸造池</strong><span>限时铸造 · 8 个等级</span><i>↗</i></button>
+            <button class="shortcut-card collection-shortcut" type="button" data-page-link="collection"><span class="shortcut-icon">◇</span><strong>数字藏品</strong><span>浏览精选数字作品</span><i>↗</i></button>
+          </div>
+          <section class="home-pool-preview">
+            <div class="activity-heading"><div><div class="section-kicker">POOL RULES</div><h2>铸造池规则</h2></div><button class="history-link" type="button" data-page-link="mint">全部铸造池 <span>→</span></button></div>
+            <div class="preview-pool-row"><span class="preview-level">01</span><span class="preview-pool-name"><strong>初级池</strong><small>账户需 ≥ 100 GRAM</small></span><span class="preview-minimum">10 <small>GRAM 起 · 1 分钟</small></span></div>
+            <div class="preview-pool-row"><span class="preview-level">02</span><span class="preview-pool-name"><strong>进阶池</strong><small>账户需 ≥ 600 GRAM</small></span><span class="preview-minimum">50 <small>GRAM 起 · 2 分钟</small></span></div>
+            <p class="history-disclaimer">达到账户门槛后解锁；下注确认后开始对应倒计时。</p>
+          </section>
+          <section class="home-note glass-panel"><span class="note-spark">✦</span><div><strong>开启你的收藏之旅</strong><p>浏览数字藏品，或前往铸造池了解铸造规则。</p></div><button type="button" aria-label="浏览藏品" data-page-link="collection">→</button></section>
+          <footer class="app-footer"><span class="footer-logo">G</span><span>GRAM DIGITAL COLLECTIBLES</span><span class="footer-version">HOME</span></footer>
+        </section>
+
+        <section class="page-content mint-page" data-page-panel="mint" aria-label="铸造池" hidden>
+        <section class="account-card glass-panel" aria-label="演示账户资产">
+          <div class="account-orbit orbit-one"></div>
+          <div class="account-orbit orbit-two"></div>
+          <div class="account-topline">
+            <div class="eyebrow"><span class="live-dot"></span>我的资产</div>
+            <button class="eye-button" type="button" aria-label="隐藏余额" aria-pressed="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z" />
+                <circle cx="12" cy="12" r="2.5" />
+              </svg>
+            </button>
+          </div>
+          <div class="balance-row">
+            <span class="balance-coin" aria-hidden="true">G</span>
+            <span class="balance-value" data-wallet-balance data-balance="1,280">1,280</span>
+            <span class="balance-unit">GRAM</span>
+          </div>
+          <div class="account-footer">
+            <span>账户总额 <strong data-wallet-total>1,280 GRAM</strong></span>
+            <span class="account-separator"></span>
+            <span>可用余额 <strong data-wallet-available>1,280 GRAM</strong></span>
+          </div>
+          <div class="account-actions">
+            <button class="primary-action" type="button" data-wallet-open="deposit">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              充值
+            </button>
+            <button class="secondary-action" type="button" data-wallet-open="withdraw">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7 7h12v12M19 7l-9 9-5-5" />
+              </svg>
+              转出
+            </button>
+          </div>
+          <div class="account-id"><span class="id-dot"></span>演示账户 <span>·</span> #GR-0824</div>
+        </section>
+
+        <section class="pool-section" aria-labelledby="pool-heading">
+          <div class="section-heading">
+            <div>
+              <div class="section-kicker">MINTING PROTOCOL <span data-selected-level-index>01 / 08</span></div>
+              <h1 id="pool-heading">铸造池<span class="heading-period">.</span></h1>
+              <p class="section-description">选择等级与铸造方式，开启限时铸造</p>
+            </div>
+            <button class="help-button" type="button" data-toast="规则说明将在正式版本中开放">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M9.8 9a2.3 2.3 0 1 1 3.7 1.8c-1 .7-1.5 1-1.5 2.2M12 16.5v.1" />
+              </svg>
+              规则
+            </button>
+          </div>
+
+          <div class="pool-grid" role="group" aria-label="选择铸造池等级">
+            <button class="pool-card is-selected" type="button" data-level="1" aria-pressed="true">
+              <span class="pool-card-top"><span class="level-number">01</span><span class="pool-status" data-pool-status>已解锁</span></span>
+              <span class="pool-name">初级池</span>
+              <span class="pool-stake"><strong data-pool-stake>10</strong><span data-pool-stake-label>GRAM 起投</span></span>
+              <span class="pool-card-bottom"><span data-pool-requirement>账户需 ≥ 100 GRAM</span><span class="pool-arrow">↗</span></span>
+              <span class="pool-duration"><span>倒计时 <strong data-pool-timer>01:00</strong></span><span>收益率 <strong data-pool-profit>+30%</strong></span></span>
+              <span class="selected-check" aria-hidden="true">✓</span>
+            </button>
+            <button class="pool-card" type="button" data-level="2" aria-pressed="false">
+              <span class="pool-card-top"><span class="level-number">02</span><span class="pool-status" data-pool-status>已解锁</span></span>
+              <span class="pool-name">进阶池</span>
+              <span class="pool-stake"><strong data-pool-stake>50</strong><span data-pool-stake-label>GRAM 起投</span></span>
+              <span class="pool-card-bottom"><span data-pool-requirement>账户需 ≥ 600 GRAM</span><span class="pool-arrow">↗</span></span>
+              <span class="pool-duration"><span>倒计时 <strong data-pool-timer>02:00</strong></span><span>收益率 <strong data-pool-profit>+40%</strong></span></span>
+              <span class="selected-check" aria-hidden="true">✓</span>
+            </button>
+            <button class="pool-card is-locked" type="button" data-level="3" aria-pressed="false" disabled>
+              <span class="pool-card-top"><span class="level-number">03</span><span class="pool-status" data-pool-status>资金不足</span></span>
+              <span class="pool-name">精英池</span>
+              <span class="pool-stake"><strong data-pool-stake>300</strong><span data-pool-stake-label>GRAM 起投</span></span>
+              <span class="pool-card-bottom"><span data-pool-requirement>账户需 ≥ 2,000 GRAM</span><span class="lock-icon">⌑</span></span>
+              <span class="pool-duration"><span>倒计时 <strong data-pool-timer>03:00</strong></span><span>收益率 <strong data-pool-profit>+50%</strong></span></span>
+            </button>
+            <button class="pool-card is-locked" type="button" data-level="4" aria-pressed="false" disabled>
+              <span class="pool-card-top"><span class="level-number">04</span><span class="pool-status" data-pool-status>资金不足</span></span>
+              <span class="pool-name">大师池</span>
+              <span class="pool-stake"><strong data-pool-stake>800</strong><span data-pool-stake-label>GRAM 起投</span></span>
+              <span class="pool-card-bottom"><span data-pool-requirement>账户需 ≥ 7,000 GRAM</span><span class="lock-icon">⌑</span></span>
+              <span class="pool-duration"><span>倒计时 <strong data-pool-timer>04:00</strong></span><span>收益率 <strong data-pool-profit>+60%</strong></span></span>
+            </button>
+            <button class="pool-card is-locked" type="button" data-level="5" aria-pressed="false" disabled>
+              <span class="pool-card-top"><span class="level-number">05</span><span class="pool-status" data-pool-status>资金不足</span></span>
+              <span class="pool-name">星环池</span>
+              <span class="pool-stake"><strong data-pool-stake>2,000</strong><span data-pool-stake-label>GRAM 起投</span></span>
+              <span class="pool-card-bottom"><span data-pool-requirement>账户需 ≥ 20,000 GRAM</span><span class="lock-icon">⌑</span></span>
+              <span class="pool-duration"><span>倒计时 <strong data-pool-timer>05:00</strong></span><span>收益率 <strong data-pool-profit>+70%</strong></span></span>
+            </button>
+            <button class="pool-card is-locked" type="button" data-level="6" aria-pressed="false" disabled>
+              <span class="pool-card-top"><span class="level-number">06</span><span class="pool-status" data-pool-status>资金不足</span></span>
+              <span class="pool-name">深空池</span>
+              <span class="pool-stake"><strong data-pool-stake>5,000</strong><span data-pool-stake-label>GRAM 起投</span></span>
+              <span class="pool-card-bottom"><span data-pool-requirement>账户需 ≥ 50,000 GRAM</span><span class="lock-icon">⌑</span></span>
+              <span class="pool-duration"><span>倒计时 <strong data-pool-timer>06:00</strong></span><span>收益率 <strong data-pool-profit>+80%</strong></span></span>
+            </button>
+            <button class="pool-card is-locked" type="button" data-level="7" aria-pressed="false" disabled>
+              <span class="pool-card-top"><span class="level-number">07</span><span class="pool-status" data-pool-status>资金不足</span></span>
+              <span class="pool-name">奇点池</span>
+              <span class="pool-stake"><strong data-pool-stake>10,000</strong><span data-pool-stake-label>GRAM 起投</span></span>
+              <span class="pool-card-bottom"><span data-pool-requirement>账户需 ≥ 100,000 GRAM</span><span class="lock-icon">⌑</span></span>
+              <span class="pool-duration"><span>倒计时 <strong data-pool-timer>07:00</strong></span><span>收益率 <strong data-pool-profit>+90%</strong></span></span>
+            </button>
+            <button class="pool-card is-locked" type="button" data-level="8" aria-pressed="false" disabled>
+              <span class="pool-card-top"><span class="level-number">08</span><span class="pool-status" data-pool-status>资金不足</span></span>
+              <span class="pool-name">创世池</span>
+              <span class="pool-stake"><strong data-pool-stake>20,000</strong><span data-pool-stake-label>GRAM 起投</span></span>
+              <span class="pool-card-bottom"><span data-pool-requirement>账户需 ≥ 200,000 GRAM</span><span class="lock-icon">⌑</span></span>
+              <span class="pool-duration"><span>倒计时 <strong data-pool-timer>08:00</strong></span><span>收益率 <strong data-pool-profit>+100%</strong></span></span>
+            </button>
+          </div>
+          <p class="tier-note"><span aria-hidden="true">✳</span> 达到账户门槛后解锁；每个池的最低起投额与倒计时按等级递增。</p>
+        </section>
+
+        <section class="mint-panel glass-panel" aria-labelledby="mint-heading">
+          <div class="mint-panel-header">
+            <div>
+              <div class="section-kicker">CONFIGURATION</div>
+              <h2 id="mint-heading">铸造设置</h2>
+            </div>
+            <span class="level-chip"><span class="live-dot"></span><span data-selected-level>LV.01 初级池</span></span>
+          </div>
+
+          <div class="method-label">
+            <span>选择铸造方式</span>
+            <button type="button" class="text-link" data-toast="方式说明将在正式版本中开放">方式说明 ↗</button>
+          </div>
+          <div class="method-grid" role="group" aria-label="选择铸造方式">
+            <button class="method-card is-selected" type="button" data-method="1" aria-pressed="true">
+              <span class="method-icon method-icon-one">M1</span>
+              <span class="method-copy"><strong>铸造方式 01</strong><small>标准铸造 · 规则待公布</small></span>
+              <span class="radio-indicator"></span>
+            </button>
+            <button class="method-card" type="button" data-method="2" aria-pressed="false">
+              <span class="method-icon method-icon-two">M2</span>
+              <span class="method-copy"><strong>铸造方式 02</strong><small>进阶铸造 · 规则待公布</small></span>
+              <span class="radio-indicator"></span>
+            </button>
+          </div>
+
+          <div class="amount-label"><label for="mint-amount">铸造金额</label><span>可用 <strong data-wallet-available>1,280 GRAM</strong></span></div>
+          <div class="amount-control">
+            <input id="mint-amount" inputmode="decimal" type="number" min="10" max="1280" step="1" value="10" aria-describedby="amount-hint" />
+            <span>GRAM</span>
+            <button type="button" data-fill="max" aria-label="填入全部可用余额">MAX</button>
+          </div>
+          <div class="amount-hint" id="amount-hint"><span data-minimum-stake>最低铸造 10 GRAM</span><span data-amount-feedback></span></div>
+
+          <div class="session-strip">
+            <div class="session-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5l3.5 2" /></svg>
+            </div>
+            <div><span>本池倒计时</span><strong data-session-timer>01:00</strong></div>
+            <span class="session-live" data-session-state>下注后开始</span>
+          </div>
+          <div class="mint-odds-line"><span>演示概率 <strong>盈利 50% / 亏损 50%</strong></span><span>本池盈利率 <strong data-selected-profit>+30%</strong></span></div>
+
+          <button class="mint-button" type="button" data-start-mint>
+            开启演示铸造 <span aria-hidden="true">↗</span>
+          </button>
+          <p class="risk-note"><span aria-hidden="true">ⓘ</span> 演示模式会暂扣下注金额并在倒计时结束后模拟结算；盈利按本池收益率计算，亏损则下注金额全额损失，不涉及真实资产。</p>
+        </section>
+
+        <section class="activity-section" aria-labelledby="activity-heading">
+          <div class="activity-heading">
+            <div>
+              <div class="section-kicker">RECENT ACTIVITY</div>
+              <h2 id="activity-heading">铸造记录</h2>
+            </div>
+            <button class="history-link" type="button" data-toast="完整记录将在正式版本中开放">全部记录 <span aria-hidden="true">→</span></button>
+          </div>
+          <div class="activity-list" data-activity-list>
+            <div class="activity-row">
+              <div class="activity-token">01</div>
+              <div class="activity-copy"><strong>初级池 · 方式 01</strong><span>今天 10:24 <i>·</i> 演示记录</span></div>
+              <div class="activity-result"><strong>—</strong><span>待接入结算规则</span></div>
+            </div>
+            <div class="activity-row">
+              <div class="activity-token">02</div>
+              <div class="activity-copy"><strong>进阶池 · 方式 02</strong><span>昨天 18:06 <i>·</i> 演示记录</span></div>
+              <div class="activity-result"><strong>—</strong><span>待接入结算规则</span></div>
+            </div>
+          </div>
+          <p class="history-disclaimer">记录仅用于展示，不代表真实交易、收益或链上资产。</p>
+        </section>
+
+        <footer class="app-footer">
+          <span class="footer-logo">G</span>
+          <span>GRAM DIGITAL COLLECTIBLES</span>
+          <span class="footer-version">PROTO v0.1</span>
+        </footer>
+        </section>
+
+        <section class="page-content collection-page" data-page-panel="collection" aria-labelledby="collection-heading" hidden>
+          <div class="section-heading page-title-row">
+            <div><div class="section-kicker">TELEGRAM GIFTS <span>02 / 04</span></div><h1 id="collection-heading">电报礼物<span class="heading-period">.</span></h1><p class="section-description">管理典藏、模拟出租与存入生息</p></div><span class="collection-count">礼物图鉴</span>
+          </div>
+          <section class="my-collection glass-panel" aria-labelledby="my-collection-heading">
+            <div class="my-collection-heading">
+              <div><div class="section-kicker">MY COLLECTION · DEMO</div><h2 id="my-collection-heading">我的典藏</h2></div>
+              <button class="claim-earnings-button" type="button" data-claim-earnings disabled>领取收益 <span data-claimable-amount>0.00</span> G</button>
+            </div>
+            <div class="collection-asset-stats">
+              <div><span>典藏总数</span><strong data-holding-count>0 件</strong></div>
+              <div><span>出租中</span><strong data-rented-count>0 件</strong></div>
+              <div><span>生息中</span><strong data-interest-count>0 件</strong></div>
+            </div>
+            <div class="holding-filters" role="group" aria-label="筛选我的典藏">
+              <button type="button" class="holding-filter is-active" data-holding-filter="all" aria-pressed="true">全部</button>
+              <button type="button" class="holding-filter" data-holding-filter="owned" aria-pressed="false">未托管</button>
+              <button type="button" class="holding-filter" data-holding-filter="rental" aria-pressed="false">出租中</button>
+              <button type="button" class="holding-filter" data-holding-filter="interest" aria-pressed="false">生息中</button>
+            </div>
+            <div class="holdings-grid" data-holdings-grid aria-live="polite"></div>
+            <div class="holdings-empty" data-holdings-empty>
+              <span>◇</span><strong>这里还没有典藏品</strong><p>从下方礼物图鉴选择藏品，加入本地演示典藏。</p>
+            </div>
+            <p class="holdings-disclaimer">本地演示参数：每件估值 100 GRAM；出租佣金 1%/日，存入年化 8%。按时间模拟累计，可随时停止。非真实 NFT、租赁、利率或收益承诺。</p>
+          </section>
+          <div class="collection-feature">
+            <a class="feature-art gift-image-link" href="https://fragment.com/gifts/eternalrose" target="_blank" rel="noopener noreferrer" aria-label="在 Fragment 查看 Eternal Roses"><img class="feature-image" src="https://fragment.com/file/gifts/eternalrose/thumb.webp" alt="Fragment Eternal Roses Telegram 礼物官方目录缩略图" /><span class="art-index">ETERNAL ROSES · FRAGMENT ↗</span></a>
+            <div class="feature-copy"><span class="section-kicker">TELEGRAM GIFT · FRAGMENT</span><h2>永恒玫瑰 · Eternal Roses</h2><p>图片直接来自 Fragment 公开礼物目录。点击主图可打开对应礼物页面；实际图片与库存以来源页面为准。</p><a class="fragment-source" href="https://fragment.com/gifts/eternalrose" target="_blank" rel="noopener noreferrer">在 Fragment 查看礼物 <span>↗</span></a></div>
+          </div>
+          <div class="activity-heading collection-subheading"><div><div class="section-kicker">TELEGRAM GIFT ICONS</div><h2>礼物图鉴</h2></div><span class="home-count">GIFT SERIES</span></div>
+          <div class="gift-tools">
+            <label class="gift-search">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg>
+              <input type="search" data-gift-search placeholder="搜索礼物名称" autocomplete="off" aria-label="搜索 Telegram 礼物" />
+              <button type="button" data-clear-search aria-label="清空搜索" hidden>×</button>
+            </label>
+            <div class="gift-toolbar">
+              <div class="gift-filters" role="group" aria-label="礼物筛选">
+                <button type="button" class="gift-filter is-active" data-gift-filter="all" aria-pressed="true">全部 <span data-all-count>0</span></button>
+                <button type="button" class="gift-filter" data-gift-filter="favorites" aria-pressed="false">♡ 收藏 <span data-favorite-count>0</span></button>
+              </div>
+              <label class="gift-sort-label" aria-label="礼物排序">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10m-7 6h4"/></svg>
+                <select data-gift-sort aria-label="排序礼物">
+                  <option value="featured">精选排序</option>
+                  <option value="name-asc">名称 A–Z</option>
+                  <option value="name-desc">名称 Z–A</option>
+                </select>
+              </label>
+            </div>
+            <div class="gift-category-row" role="group" aria-label="礼物分类筛选">
+              <button type="button" class="category-chip is-active" data-gift-category="all" aria-pressed="true">全部分类</button>
+              <button type="button" class="category-chip" data-gift-category="animals" aria-pressed="false">动物</button>
+              <button type="button" class="category-chip" data-gift-category="accessories" aria-pressed="false">饰品</button>
+              <button type="button" class="category-chip" data-gift-category="flowers" aria-pressed="false">花卉</button>
+              <button type="button" class="category-chip" data-gift-category="celebration" aria-pressed="false">节庆</button>
+              <button type="button" class="category-chip" data-gift-category="other" aria-pressed="false">其他</button>
+            </div>
+            <div class="gift-result-line"><span data-gift-result>正在载入礼物目录…</span><span>图片来源 · Fragment</span></div>
+          </div>
+          <div class="collection-grid" data-gift-grid aria-live="polite"></div>
+          <div class="gift-empty-state glass-panel" data-gift-empty hidden>
+            <span>⌕</span><strong>没有找到符合条件的礼物</strong><p>换个名称试试，或清除当前筛选条件。</p><button type="button" data-reset-gifts>清除筛选</button>
+          </div>
+          <button class="load-more-gifts" type="button" data-load-more hidden>显示更多礼物 <span>↓</span></button>
+          <div class="collection-empty glass-panel"><span>◇</span><strong>关于礼物图鉴</strong><p>此处为 Fragment 礼物目录预览；加入“我的典藏”只会创建本地演示记录，不验证持有权或转移 NFT。真实藏品需在正式版连接钱包验证。</p><a class="fragment-source" href="https://fragment.com/gifts" target="_blank" rel="noopener noreferrer">浏览 Fragment 礼物目录 <span>↗</span></a></div>
+          <footer class="app-footer"><span class="footer-logo">G</span><span>GRAM DIGITAL COLLECTIBLES</span><span class="footer-version">COLLECTIONS</span></footer>
+        </section>
+
+        <section class="page-content profile-page" data-page-panel="profile" aria-labelledby="profile-heading" hidden>
+          <div class="section-heading page-title-row">
+            <div><div class="section-kicker">YOUR ACCOUNT <span>04 / 04</span></div><h1 id="profile-heading">个人中心<span class="heading-period">.</span></h1><p class="section-description">管理你的账户与偏好设置</p></div><span class="demo-pill"><span></span>演示账户</span>
+          </div>
+          <section class="profile-identity glass-panel"><div class="profile-avatar">G<span></span></div><div class="profile-id-copy"><strong>GRAM 收藏者</strong><span>演示账户 · #GR-0824</span></div><span class="verified-mark">✓</span></section>
+          <section class="profile-wallet glass-panel">
+            <div class="profile-wallet-heading"><div><div class="section-kicker">WALLET OVERVIEW</div><h2>资产概览</h2></div><span class="wallet-network"><i></i>演示网络</span></div>
+            <div class="profile-total"><strong data-wallet-balance>1,280</strong><span>GRAM</span></div>
+            <div class="wallet-details"><div><span>账户总额</span><strong data-wallet-total>1,280 GRAM</strong></div><div><span>可用余额</span><strong data-wallet-available>1,280 GRAM</strong></div><div><span>藏品数量</span><strong data-profile-holding-count>0 件</strong></div></div>
+            <div class="profile-wallet-actions"><button type="button" class="primary-action" data-wallet-open="deposit">＋ 充值</button><button type="button" class="secondary-action" data-wallet-open="withdraw">↗ 转出</button></div>
+          </section>
+          <section class="wallet-history-section">
+            <div class="section-kicker">WALLET ACTIVITY</div>
+            <h2>资金记录</h2>
+            <div class="wallet-history-list" data-wallet-history></div>
+            <p class="profile-disclaimer">这里只记录本设备上的演示操作，不代表真实链上交易。</p>
+          </section>
+          <section class="profile-menu-section">
+            <div class="section-kicker">PREFERENCES</div>
+            <div class="settings-list">
+              <div class="settings-row"><span class="settings-icon">◐</span><span class="settings-copy"><strong>外观主题</strong><small>切换深色或浅色模式</small></span><button class="settings-theme" type="button" data-theme-toggle><span data-theme-name>深色模式</span><i class="theme-switch"><b></b></i></button></div>
+              <button class="settings-row" type="button" data-toast="语言设置将在后续版本开放"><span class="settings-icon">文</span><span class="settings-copy"><strong>语言</strong><small>界面显示语言</small></span><span class="settings-value">简体中文　›</span></button>
+              <button class="settings-row" type="button" data-toast="钱包连接将在正式版本开放"><span class="settings-icon">◇</span><span class="settings-copy"><strong>钱包连接</strong><small>当前为演示模式</small></span><span class="settings-value">未连接　›</span></button>
+              <button class="settings-row" type="button" data-toast="帮助中心将在后续版本开放"><span class="settings-icon">?</span><span class="settings-copy"><strong>帮助与规则</strong><small>了解平台使用方式</small></span><span class="settings-value">查看　›</span></button>
+              <button class="settings-row" type="button" data-toast="当前为 GRAM 演示原型 v0.1"><span class="settings-icon">ⓘ</span><span class="settings-copy"><strong>关于平台</strong><small>版本与平台信息</small></span><span class="settings-value">v0.1　›</span></button>
+            </div>
+          </section>
+          <p class="profile-disclaimer">演示原型 · 暂无钱包连接、真实资产或链上交易功能。</p>
+          <footer class="app-footer"><span class="footer-logo">G</span><span>GRAM DIGITAL COLLECTIBLES</span><span class="footer-version">PROFILE</span></footer>
+        </section>
+        </main>
+
+      <div class="gift-detail-backdrop" data-gift-detail aria-hidden="true">
+        <section class="gift-detail-modal glass-panel" role="dialog" aria-modal="true" aria-labelledby="gift-detail-title">
+          <button class="gift-detail-close" type="button" aria-label="关闭礼物详情" data-gift-detail-close>×</button>
+          <div class="gift-detail-art"><img data-detail-image alt="" /><span>TELEGRAM GIFT · FRAGMENT</span></div>
+          <div class="gift-detail-content">
+            <div class="gift-detail-kicker">GIFT COLLECTION</div>
+            <h2 id="gift-detail-title" data-detail-title></h2>
+            <p data-detail-description></p>
+            <div class="gift-detail-stats"><div><span>来源</span><strong>Fragment 礼物目录</strong></div><div><span>状态</span><strong>外部预览</strong></div></div>
+            <div class="gift-detail-actions">
+              <button type="button" class="gift-save-button" data-detail-favorite>♡ 收藏礼物</button>
+              <a class="gift-source-button" data-detail-source href="https://fragment.com/gifts" target="_blank" rel="noopener noreferrer">打开 Fragment 原页 <span>↗</span></a>
+            </div>
+            <button type="button" class="add-to-collection-button" data-detail-add>＋ 模拟加入我的典藏</button>
+            <p class="gift-detail-note">礼物图片来自 Fragment 公开目录。加入典藏仅创建本设备的演示记录，不代表你拥有该 NFT，也不会转移或托管真实资产。</p>
+          </div>
+        </section>
+      </div>
+
+      <nav class="bottom-nav" aria-label="主导航">
+        <button class="nav-item is-active" type="button" data-page-link="home" aria-current="page">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3.5 10 8.5-7 8.5 7v10.5h-6v-6h-5v6h-6Z" /></svg>
+          <span>首页</span>
+        </button>
+        <button class="nav-item" type="button" data-page-link="mint" aria-current="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19V9m7 10V5m7 14v-7" /><path d="M3 19.5h18" /></svg>
+          <span>铸造池</span>
+        </button>
+        <button class="nav-item" type="button" data-page-link="collection" aria-current="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9Z" /><path d="m4.5 7.8 7.5 4.4 7.5-4.4M12 12.2V21" /></svg>
+          <span>藏品</span>
+        </button>
+        <button class="nav-item" type="button" data-page-link="profile" aria-current="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5" /><path d="M4.5 20c.4-4 3.2-6 7.5-6s7.1 2 7.5 6" /></svg>
+          <span>我的</span>
+        </button>
+      </nav>
+
+      <div class="toast" role="status" aria-live="polite" data-toast-box></div>
+      <div class="round-modal-backdrop" data-round-modal aria-hidden="true">
+        <section class="round-modal glass-panel" role="dialog" aria-modal="true" aria-labelledby="round-modal-title">
+          <button class="modal-close" type="button" aria-label="将倒计时放到后台" data-round-minimize>×</button>
+          <div class="section-kicker">DEMO ROUND · 50% / 50%</div>
+          <div data-round-running>
+            <div class="round-modal-pool" data-round-pool-name>LV.01 初级池</div>
+            <h2 id="round-modal-title">正在铸造</h2>
+            <p class="round-modal-copy">盈亏数字仅为演示动画，最终结果在倒计时结束时揭晓。</p>
+            <div class="round-countdown" data-round-countdown>01:00</div>
+            <div class="round-progress"><span data-round-progress></span></div>
+            <div class="round-flash-card" data-round-flash-card>
+              <span data-round-flash-label>结果随机跳动中</span>
+              <strong data-round-flash-amount>+0.00 GRAM</strong>
+            </div>
+            <div class="round-modal-facts"><span>本次下注 <strong data-round-stake>10 GRAM</strong></span><span>中奖收益率 <strong data-round-rate>+30%</strong></span></div>
+            <button class="round-minimize-button" type="button" data-round-minimize>在后台继续</button>
+          </div>
+          <div data-round-result hidden>
+            <div class="round-result-mark" data-round-result-mark>✦</div>
+            <h2 data-round-result-heading>本轮结果</h2>
+            <p class="round-modal-copy" data-round-result-copy></p>
+            <div class="round-final-amount" data-round-final-amount>+0.00 GRAM</div>
+            <div class="round-result-details"><div><span>下注金额</span><strong data-round-result-stake>10 GRAM</strong></div><div><span>本池盈利率</span><strong data-round-result-rate>+30%</strong></div><div><span>账户余额</span><strong data-round-result-balance>1,280 GRAM</strong></div></div>
+            <button class="round-minimize-button" type="button" data-round-result-close>返回铸造池</button>
+          </div>
+        </section>
+      </div>
+      <div class="modal-backdrop wallet-modal-backdrop" data-wallet-modal aria-hidden="true">
+        <section class="wallet-modal glass-panel" role="dialog" aria-modal="true" aria-labelledby="wallet-modal-title">
+          <button class="modal-close" type="button" aria-label="关闭钱包操作" data-wallet-close>×</button>
+          <div class="section-kicker">DEMO WALLET · NO REAL TRANSFER</div>
+          <h2 id="wallet-modal-title" data-wallet-title>账户充值</h2>
+          <div class="wallet-mode-tabs" role="group" aria-label="钱包操作">
+            <button type="button" data-wallet-tab="deposit" aria-pressed="true">充值</button>
+            <button type="button" data-wallet-tab="withdraw" aria-pressed="false">转出</button>
+          </div>
+          <div data-wallet-deposit-panel>
+            <p class="wallet-modal-description">输入金额模拟为演示账户增加 GRAM。不会创建充值地址、连接钱包或接收真实资产。</p>
+            <div class="deposit-address-card" aria-label="充值地址二维码演示占位">
+              <div class="demo-qr-frame">
+                <svg class="demo-qr" viewBox="0 0 168 168" role="img" aria-labelledby="demo-qr-title demo-qr-description">
+                  <title id="demo-qr-title">演示用二维码图案</title>
+                  <desc id="demo-qr-description">此图案不是有效充值二维码，不可扫描转账。</desc>
+                  <rect width="168" height="168" rx="8" fill="#f5f6ff" />
+                  <g fill="#222844">
+                    <path d="M8 8h44v44H8zm8 8v28h28V16zM20 20h20v20H20zM116 8h44v44h-44zm8 8v28h28V16zM128 20h20v20h-20zM8 116h44v44H8zm8 8v28h28v-28zm4 4h20v20H20z" fill-rule="evenodd" />
+                    <path d="M64 8h8v8h-8zm16 0h8v16h-8zm16 0h8v8h-8zm-32 16h8v8h-8zm16 8h8v8h-8zm16-8h8v16h-8zm16 0h8v8h-8zm-48 16h8v8h-8zm16 8h8v8h-8zm16-8h8v16h-8zm24 0h8v8h-8zm16 8h8v8h-8zM64 56h8v8h-8zm16 0h16v8H80zm24 0h8v8h-8zm16 0h8v8h-8zm-56 16h8v8h-8zm16-8h8v16h-8zm16 8h16v8H96zm24-8h8v16h-8zm16 8h8v8h-8zm-72 16h16v8H64zm24-8h8v16h-8zm16 8h8v8h-8zm16-8h16v8h-16zm-56 16h8v16h-8zm16 8h16v8H80zm24-8h8v16h-8zm16 8h8v8h-8zm16-8h8v16h-8zM64 120h8v8h-8zm16 0h8v16h-8zm16 0h16v8H96zm24 0h8v8h-8zm16 0h16v8h-16zm-72 16h16v8H64zm24 0h8v16h-8zm16-8h8v16h-8zm16 8h16v8h-16zm24-8h8v16h-8zm-64 24h8v8h-8zm16 0h16v8H96zm24 0h8v8h-8zm16 0h16v8h-16z" />
+                  </g>
+                  <rect x="62" y="62" width="44" height="44" rx="9" fill="#e8ebfa" stroke="#c7cdea" />
+                  <text x="84" y="88" fill="#59658f" font-family="Arial,sans-serif" font-size="10" font-weight="700" text-anchor="middle">DEMO</text>
+                </svg>
+              </div>
+              <strong>充值地址尚未配置</strong>
+              <span>演示二维码 · 不可扫描转账</span>
+            </div>
+            <label class="wallet-field-label" for="deposit-amount">充值金额</label>
+            <div class="wallet-input-wrap"><input id="deposit-amount" type="number" inputmode="decimal" min="0.01" step="0.01" placeholder="输入 GRAM 数量" /><span>GRAM</span></div>
+            <p class="wallet-inline-feedback" data-deposit-feedback aria-live="polite"></p>
+            <button type="button" class="wallet-submit" data-deposit-submit>模拟充值</button>
+          </div>
+          <div data-wallet-withdraw-panel hidden>
+            <p class="wallet-modal-description">填写演示收款信息并确认后，将从本地虚拟余额中扣除。不会向任何地址发送资产。</p>
+            <div class="wallet-available-line">当前可用余额 <strong data-wallet-available>1,280 GRAM</strong></div>
+            <label class="wallet-field-label" for="withdraw-address">收款地址（仅演示）</label>
+            <input class="wallet-text-input" id="withdraw-address" type="text" maxlength="128" autocomplete="off" placeholder="输入演示用地址" />
+            <label class="wallet-field-label" for="withdraw-amount">转出金额</label>
+            <div class="wallet-input-wrap"><input id="withdraw-amount" type="number" inputmode="decimal" min="0.01" step="0.01" placeholder="输入 GRAM 数量" /><span>GRAM</span><button type="button" data-withdraw-max>MAX</button></div>
+            <div class="wallet-fee-line"><span>网络手续费</span><strong>未配置 · 演示不计费</strong></div>
+            <p class="wallet-inline-feedback" data-withdraw-feedback aria-live="polite"></p>
+            <button type="button" class="wallet-submit" data-withdraw-submit>继续</button>
+          </div>
+          <div class="wallet-confirm-panel" data-wallet-confirm-panel hidden>
+            <p class="wallet-modal-description">请确认这是模拟操作。提交后只会更新此浏览器保存的演示余额和记录。</p>
+            <div class="wallet-confirm-row"><span>收款地址</span><strong data-confirm-address></strong></div>
+            <div class="wallet-confirm-row"><span>转出金额</span><strong data-confirm-amount></strong></div>
+            <div class="wallet-confirm-row"><span>手续费</span><strong>未配置 · 演示不计费</strong></div>
+            <div class="wallet-confirm-actions"><button type="button" class="secondary-action" data-wallet-back>返回修改</button><button type="button" class="wallet-submit" data-withdraw-confirm>确认模拟转出</button></div>
+          </div>
+          <p class="wallet-demo-notice">演示原型：余额仅保存在当前浏览器中，无真实钱包、充值或转账能力。</p>
+        </section>
+      </div>
+      <div class="modal-backdrop" data-modal aria-hidden="true">
+        <section class="confirm-modal glass-panel" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+          <button class="modal-close" type="button" aria-label="关闭" data-modal-close>×</button>
+          <span class="modal-mark">!</span>
+          <div class="section-kicker">DEMO ONLY</div>
+          <h2 id="modal-title">确认开启演示？</h2>
+          <p>演示模式：将从本地虚拟余额暂扣下注金额，并按 50% 胜率模拟结算；失败会损失全部下注。不会连接钱包或发送真实交易。</p>
+          <div class="modal-summary"><span>铸造金额</span><strong data-modal-amount>10 GRAM</strong></div>
+          <div class="modal-summary"><span>铸造方式</span><strong data-modal-method>方式 01</strong></div>
+          <div class="modal-summary"><span>盈利时收益</span><strong data-modal-profit>+3 GRAM（+30%）</strong></div>
+          <div class="modal-buttons">
+            <button class="modal-cancel" type="button" data-modal-close>再看看</button>
+            <button class="modal-confirm" type="button" data-modal-confirm>进入演示</button>
+          </div>
+        </section>
+      </div>
+    </div>
+  </body>
+</html>
