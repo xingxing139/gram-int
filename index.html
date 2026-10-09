@@ -16,11 +16,65 @@
       href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=desktop-20261009" />
-    <script src="./app.js" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=auth-20261009-2" />
+    <script src="./app.js?v=auth-20261009" defer></script>
   </head>
   <body>
-    <div class="app-shell">
+    <section class="auth-screen" data-auth-screen aria-labelledby="auth-heading">
+      <div class="auth-layout">
+        <section class="auth-intro" aria-label="GRAM 平台介绍">
+          <a class="auth-brand" href="#auth" aria-label="GRAM">
+            <span class="auth-brand-mark" aria-hidden="true">
+              <svg viewBox="0 0 64 64" focusable="false">
+                <path d="M44.5 20.8c-3.2-3.5-7.4-5.3-12.5-5.3-10 0-17 6.6-17 16.2s6.8 15.8 17 15.8c4.8 0 9.3-1.2 12.8-3.6V30.4H30.7v6.2h7.2v3.4c-2 .9-3.9 1.3-6 1.3-6.2 0-10-3.8-10-9.6 0-5.7 3.8-9.6 10-9.6 3.3 0 6.1 1.1 8.3 3.5z"/>
+                <circle cx="49" cy="15" r="3.2"/>
+              </svg>
+            </span>
+            <span><strong>GRAM</strong><small>DIGITAL COLLECTIBLES</small></span>
+          </a>
+          <div class="auth-intro-copy">
+            <span class="section-kicker">COLLECT · MINT · DISCOVER</span>
+            <h1>进入你的<br /><span>数字典藏宇宙</span></h1>
+            <p>探索 Telegram 礼物典藏、铸造池与数字资产体验。</p>
+            <div class="auth-orbit" aria-hidden="true"><span>G</span><i></i><b></b></div>
+          </div>
+          <p class="auth-intro-caption">响应式演示平台 · 所有账户数据仅保存在当前浏览器</p>
+        </section>
+        <section class="auth-card glass-panel" aria-labelledby="auth-heading">
+          <span class="auth-demo-pill"><i></i>本地演示账户</span>
+          <div class="auth-card-heading">
+            <span class="section-kicker">WELCOME TO GRAM</span>
+            <h2 id="auth-heading">欢迎回来</h2>
+            <p>登录或创建演示账户以继续</p>
+          </div>
+          <div class="auth-tabs" role="tablist" aria-label="登录或注册">
+            <button class="auth-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="auth-login-form" data-auth-tab="login">登录</button>
+            <button class="auth-tab" type="button" role="tab" aria-selected="false" aria-controls="auth-register-form" data-auth-tab="register">注册</button>
+          </div>
+          <form class="auth-form" id="auth-login-form" data-auth-form="login" novalidate>
+            <label for="login-username">用户名</label>
+            <input id="login-username" name="username" type="text" minlength="3" maxlength="24" autocomplete="username" placeholder="输入用户名" required />
+            <label for="login-password">密码</label>
+            <input id="login-password" name="password" type="password" minlength="8" autocomplete="current-password" placeholder="输入至少 8 位密码" required />
+            <p class="auth-feedback" data-auth-feedback="login" aria-live="polite"></p>
+            <button class="auth-submit" type="submit">登录并进入平台 <span>↗</span></button>
+          </form>
+          <form class="auth-form" id="auth-register-form" data-auth-form="register" hidden novalidate>
+            <label for="register-username">用户名</label>
+            <input id="register-username" name="username" type="text" minlength="3" maxlength="24" autocomplete="username" placeholder="3–24 位字母、数字或 . _ -" required />
+            <label for="register-password">设置密码</label>
+            <input id="register-password" name="password" type="password" minlength="8" autocomplete="new-password" placeholder="至少 8 位" required />
+            <label for="register-password-confirm">确认密码</label>
+            <input id="register-password-confirm" name="passwordConfirm" type="password" minlength="8" autocomplete="new-password" placeholder="再次输入密码" required />
+            <p class="auth-feedback" data-auth-feedback="register" aria-live="polite"></p>
+            <button class="auth-submit" type="submit">创建账户并进入 <span>↗</span></button>
+          </form>
+          <p class="auth-security-note"><strong>仅为前端演示，不是安全登录。</strong>账户校验信息存于本地浏览器，无法保护公开页面或真实资产；不同演示账户也会共用此浏览器中的演示资产数据。请勿使用真实密码。</p>
+        </section>
+      </div>
+      <p class="auth-footer">GRAM · DIGITAL COLLECTIBLES <span>NO WALLET · NO REAL TRANSACTIONS</span></p>
+    </section>
+    <div class="app-shell" data-platform hidden>
       <header class="topbar">
         <a class="brand" href="#home" data-page-link="home" aria-label="GRAM 首页">
           <span class="brand-mark" aria-hidden="true">
@@ -36,6 +90,8 @@
         </a>
         <div class="topbar-actions">
           <span class="demo-pill"><span></span>演示模式</span>
+          <span class="signed-in-label">用户 <strong data-auth-user></strong></span>
+          <button class="logout-button" type="button" data-auth-logout>退出</button>
           <button class="theme-toggle" type="button" data-theme-toggle aria-label="切换到白色模式" title="切换主题">
             <svg class="sun-icon" viewBox="0 0 24 24" aria-hidden="true">
               <circle cx="12" cy="12" r="4" />

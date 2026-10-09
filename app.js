@@ -1199,12 +1199,192 @@ document.querySelectorAll("[data-round-minimize]").forEach((button) => {
 });
 document.querySelector("[data-round-result-close]").addEventListener("click", closeRoundExperience);
 
+const AUTH_ACCOUNTS_KEY = "gram-demo-auth-accounts";
+const AUTH_SESSION_KEY = "gram-demo-auth-session";
+const AUTH_PASSWORD_ITERATIONS = 120000;
+const authScreen = document.querySelector("[data-auth-screen]");
+const platform = document.querySelector("[data-platform]");
+const authUserLabel = document.querySelector("[data-auth-user]");
+let authenticatedUsername = "";
+
+function showAuthFeedback(formName, message = "") {
+  document.querySelector(`[data-auth-feedback="${formName}"]`).textContent = message;
+}
+
+function readDemoAccounts() {
+  const storedAccounts = localStorage.getItem(AUTH_ACCOUNTS_KEY);
+  if (storedAccounts === null) return [];
+  const accounts = JSON.parse(storedAccounts);
+  if (!Array.isArray(accounts) || accounts.some((account) =>
+    !account || typeof account.username !== "string" ||
+    typeof account.salt !== "string" || typeof account.verifier !== "string" ||
+    !Number.isSafeInteger(account.iterations)))
+    throw new Error("本地演示账户数据格式无效。");
+  return accounts;
+}
+
+function normalizeUsername(value) {
+  return value.trim().toLowerCase();
+}
+
+function isValidUsername(value) {
+  return /^[a-zA-Z0-9._-]{3,24}$/.test(value);
+}
+
+function toHex(bytes) {
+  return Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function derivePasswordVerifier(password, salt, iterations = AUTH_PASSWORD_ITERATIONS) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(password),
+    "PBKDF2",
+    false,
+    ["deriveBits"],
+  );
+  return toHex(await crypto.subtle.deriveBits({
+    name: "PBKDF2",
+    hash: "SHA-256",
+    salt: Uint8Array.from(salt.match(/.{2}/g) || [], (byte) => Number.parseInt(byte, 16)),
+    iterations,
+  }, key, 256));
+}
+
+function enterPlatform(username) {
+  authenticatedUsername = username;
+  authUserLabel.textContent = username;
+  authScreen.hidden = true;
+  platform.hidden = false;
+}
+
+function setAuthTab(tabName) {
+  document.querySelectorAll("[data-auth-tab]").forEach((tab) => {
+    const isActive = tab.dataset.authTab === tabName;
+    tab.classList.toggle("is-active", isActive);
+    tab.setAttribute("aria-selected", String(isActive));
+  });
+  document.querySelectorAll("[data-auth-form]").forEach((form) => {
+    form.hidden = form.dataset.authForm !== tabName;
+  });
+  document.querySelector("#auth-heading").textContent = tabName === "login" ? "欢迎回来" : "创建演示账户";
+  showAuthFeedback("login");
+  showAuthFeedback("register");
+}
+
+document.querySelectorAll("[data-auth-tab]").forEach((tab) => {
+  tab.addEventListener("click", () => setAuthTab(tab.dataset.authTab));
+});
+
+document.querySelector('[data-auth-form="register"]').addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const username = form.elements.username.value.trim();
+  const normalizedUsername = normalizeUsername(username);
+  const password = form.elements.password.value;
+  const passwordConfirm = form.elements.passwordConfirm.value;
+  const submitButton = form.querySelector('[type="submit"]');
+
+  showAuthFeedback("register");
+  if (!isValidUsername(username)) {
+    showAuthFeedback("register", "用户名需为 3–24 位字母、数字或 . _ -。");
+    return;
+  }
+  if (password.length < 8) {
+    showAuthFeedback("register", "密码至少需要 8 位。");
+    return;
+  }
+  if (password !== passwordConfirm) {
+    showAuthFeedback("register", "两次输入的密码不一致。");
+    return;
+  }
+
+  submitButton.disabled = true;
+  try {
+    const accounts = readDemoAccounts();
+    if (accounts.some((account) => account.username === normalizedUsername)) {
+      showAuthFeedback("register", "这个用户名已注册，请直接登录。");
+      return;
+    }
+    const salt = toHex(crypto.getRandomValues(new Uint8Array(16)));
+    const verifier = await derivePasswordVerifier(password, salt);
+    accounts.push({ username: normalizedUsername, displayName: username, salt, verifier, iterations: AUTH_PASSWORD_ITERATIONS });
+    localStorage.setItem(AUTH_ACCOUNTS_KEY, JSON.stringify(accounts));
+    localStorage.setItem(AUTH_SESSION_KEY, normalizedUsername);
+    form.reset();
+    enterPlatform(username);
+  } catch (error) {
+    console.error("演示账户注册失败。", error);
+    showAuthFeedback("register", "无法创建本地账户，请检查浏览器存储和 Web Crypto 支持。");
+  } finally {
+    submitButton.disabled = false;
+  }
+});
+
+document.querySelector('[data-auth-form="login"]').addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const username = form.elements.username.value.trim();
+  const normalizedUsername = normalizeUsername(username);
+  const password = form.elements.password.value;
+  const submitButton = form.querySelector('[type="submit"]');
+
+  showAuthFeedback("login");
+  if (!username || !password) {
+    showAuthFeedback("login", "请输入用户名和密码。");
+    return;
+  }
+
+  submitButton.disabled = true;
+  try {
+    const account = readDemoAccounts().find((entry) => entry.username === normalizedUsername);
+    if (!account || await derivePasswordVerifier(password, account.salt, account.iterations) !== account.verifier) {
+      showAuthFeedback("login", "用户名或密码不正确。");
+      return;
+    }
+    localStorage.setItem(AUTH_SESSION_KEY, normalizedUsername);
+    form.reset();
+    enterPlatform(account.displayName || account.username);
+  } catch (error) {
+    console.error("演示账户登录失败。", error);
+    showAuthFeedback("login", "无法读取本地账户，请检查浏览器存储和 Web Crypto 支持。");
+  } finally {
+    submitButton.disabled = false;
+  }
+});
+
+document.querySelector("[data-auth-logout]").addEventListener("click", () => {
+  localStorage.removeItem(AUTH_SESSION_KEY);
+  authenticatedUsername = "";
+  closeRoundExperience();
+  closeWallet();
+  closeModal();
+  closeGiftDetail();
+  platform.hidden = true;
+  authScreen.hidden = false;
+  setAuthTab("login");
+  document.querySelector("#login-username").focus();
+});
+
+try {
+  const savedUsername = localStorage.getItem(AUTH_SESSION_KEY);
+  const account = savedUsername && readDemoAccounts().find((entry) => entry.username === savedUsername);
+  if (account) {
+    enterPlatform(account.displayName || account.username);
+  } else if (savedUsername) {
+    localStorage.removeItem(AUTH_SESSION_KEY);
+  }
+} catch (error) {
+  console.error("无法恢复本地演示账户。", error);
+  showAuthFeedback("login", "无法读取本地账户，请检查浏览器存储。");
+}
+
 renderSavedRoundActivity();
 const resumedRoundLevel = Object.entries(poolRounds)
   .filter(([, round]) => round.endsAt > 0 && !round.settled)
   .map(([level]) => Number(level))
   .sort((first, second) => poolRounds[second].endsAt - poolRounds[first].endsAt)[0];
-if (resumedRoundLevel) openRoundExperience(resumedRoundLevel);
+if (authenticatedUsername && resumedRoundLevel) openRoundExperience(resumedRoundLevel);
 
 setInterval(() => {
   renderPoolStates();
