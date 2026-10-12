@@ -1,0 +1,40 @@
+# Supabase 配置（CLI）
+# 用法：
+#   npm i -g supabase          # 安装 Supabase CLI
+#   supabase login
+#   supabase link --project-ref <项目ID>
+#   supabase db push           # 应用 migrations/ 下的建表与函数
+#   supabase functions deploy api   # 部署 Edge Function
+#
+# 项目 ID 在 Supabase 控制台 Project Settings → General → Reference ID 找到。
+
+project_id = "your-project-ref"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[functions.api]
+verify_jwt = false
+
+# 说明：
+#   verify_jwt = false 表示这个 Edge Function 自己处理会话（Cookie + CSRF），
+#   不依赖 Supabase Auth 的 JWT。所有敏感逻辑都在函数内做权限校验，
+#   数据库侧 RLS 又已全表开启且不授予任何策略，浏览器端无法直连表。
+
+[auth]
+enabled = false
+
+[storage]
+enabled = false

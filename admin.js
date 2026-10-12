@@ -70,14 +70,22 @@ let depositAddresses = [];
 const adminOnlyModules = ["create-users", "agents", "addresses", "pools", "gifts", "audit"];
 const roleLabels = { admin: "管理员", agent: "代理", user: "用户" };
 
+/* 后端寻址：默认同源 /api；部署到 Supabase 时在 admin.html 里设置
+ * window.GRAM_API_BASE = "https://<项目>.supabase.co/functions/v1/api" */
+function adminApiBase() {
+  const configured = window.GRAM_API_BASE;
+  if (configured) return String(configured).replace(/\/+$/, "");
+  return "";
+}
 async function request(path, options = {}) {
   const method = options.method || "GET";
   const headers = { Accept: "application/json" };
   if (options.body !== undefined) headers["Content-Type"] = "application/json";
   if (["POST", "PATCH", "PUT", "DELETE"].includes(method) && csrfToken) headers["X-CSRF-Token"] = csrfToken;
-  const response = await fetch(path, {
+  const base = adminApiBase();
+  const response = await fetch(base ? `${base}${path}` : path, {
     method,
-    credentials: "same-origin",
+    credentials: base ? "include" : "same-origin",
     headers,
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
   });

@@ -30,62 +30,84 @@ ruby server.rb
 
 适配层负责占位符转换（`?` → `$1, $2`）、布尔值归一、异常归一（唯一/外键冲突统一为 409）与两种库的 schema 差异（`INTEGER PRIMARY KEY AUTOINCREMENT` ↔ `BIGSERIAL`）。
 
-## 部署到免费平台（Render + Neon，无需信用卡）
+## 部署到 Supabase（免费，无需信用卡）
 
-推荐组合：**Render 免费 Web Service 运行容器** + **Neon 免费 PostgreSQL**。全程不需要信用卡。
+平台后端已从「本地 Ruby 服务」迁移为 **Supabase PostgreSQL + Edge Functions**，前端为纯静态文件。两个部分都可以免费用：
 
-- Web Service 使用 `free` 计划：512MB 内存，不产生费用；15 分钟无请求会休眠，下次访问需 30–50 秒唤醒
-- 数据库使用 Neon 免费库（0.5GB，闲置约 5 分钟自动暂停，唤醒很快），**不依赖** Render 那个 90 天有效期的免费 PostgreSQL
-- 仓库提供 `Dockerfile`，Render 用它构建镜像；这一步在免费档同样不收费（与 Hugging Face 的 Docker SDK 付费是两回事）
+- **后端**：Supabase 免费档（500MB 数据库、每月 50 万次函数调用），无需绑卡
+- **前端**：静态文件托管到 GitHub Pages 或 Cloudflare Pages（均免费无需绑卡）
 
-### 第一步：创建免费数据库（Neon）
+迁移后业务逻辑、接口路径、字段名、权限模型与原 Ruby 版完全一致，前端调用点零改动（只改一个配置项）。
 
-1. 打开 <https://neon.tech> 用 GitHub 登录，创建一个 Project
-2. 在 Project Dashboard 复制 **Connection string**，形如
-   `postgres://user:password@ep-xxx.us-east-2.aws.neon.tech/dbname?sslmode=require`
-3. 该连接串即稍后要填的 `DATABASE_URL`
+### 目录结构
 
-### 第二步：Blueprint 部署
+```
+supabase/
+├── config.toml            # Supabase CLI 项目配置
+├── deploy.sh              # 一键部署脚本（迁移 + 函数 + 前端配置）
+├── seed-admin.sh          # 创建首个管理员账户
+├── migrations/
+│   ├── 0001_init.sql      # 10 张表、种子数据、RLS 全表锁定
+│   └── 0002_functions.sql # 原子操作函数（下注/结算/审核/调额）
+└── functions/
+    ├── _shared/           # http / db / auth / business 共享库
+    └── api/index.ts       # 全部 33 个接口的路由实现
+```
 
-1. Render 控制台 <https://dashboard.render.com> → **New → Blueprint**
-2. 授权并选择仓库 `xingxing139/gram-int`，Render 读取 `render.yaml` 自动创建服务
-3. 进入服务的 **Environment**，手工补充以下变量（`render.yaml` 中它们是注释的，必须自己填）：
+### 安全设计
 
-   | 变量 | 值 |
-   |---|---|
-   | `DATABASE_URL` | 第一步的 Neon 连接串 |
-   | `GRAM_ADMIN_USERNAME` | `admin` |
-   | `GRAM_ADMIN_PASSWORD` | 至少 12 位的强密码 |
+- 所有表启用 **行级安全（RLS）且不授予任何策略**：浏览器端用 anon/authenticated 密钥**无法直接读写任何表**
+- 唯一数据入口是 Edge Function，它以 `service_role` 密钥连接（该密钥只存在于服务端环境变量，不会下发到浏览器）
+- 会改余额的复合操作（下注扣款、结算派奖、提现冻结、审核入账、管理员调额）全部下沉为 **Postgres 函数 + `SELECT ... FOR UPDATE` 行锁**，避免并发超额扣注
+- 会话令牌只存 SHA-256 哈希；写操作强制校验 CSRF；跨站 Cookie 为 `HttpOnly; SameSite=None; Secure`
 
-   `BIND_ADDRESS` 与 `RACK_ENV` 已在 `render.yaml` 中预设，无需重复设置
+### 部署步骤
 
-4. 保存后 Render 自动重新部署，完成后分配 `https://xxx.onrender.com` 域名，管理后台路径为 `/admin.html`
+**1. 安装 CLI 并准备项目**
+```sh
+npm i -g supabase
+supabase login
+```
+在 <https://supabase.com> 创建项目，记下 Project Settings → General 里的 **Reference ID**。
 
-#### 零成本快速演示（Replit，无需绑卡）
+**2. 一键部署后端**
+```sh
+cd supabase
+./deploy.sh <你的项目Reference ID>
+```
+脚本会依次：关联项目 → 推送数据库迁移（建表 + 8 个铸造池 + 24 个礼物种子）→ 部署 `api` 函数 → 自动把前端 `supabase-config.js` 指向该项目。
 
-如果只是想先把项目跑起来给别人看，不想配置任何平台，用 Replit 最简单：
+**3. 配置服务端密钥**（Supabase 控制台 → Edge Functions → Secrets）
 
-1. <https://replit.com> 用 GitHub 登录（免费，不需要信用卡）
-2. **Create Repl** → **Import from GitHub** → 填 `https://github.com/xingxing139/gram-int`
-3. 直接点 **Run**
+| 变量 | 值 |
+|---|---|
+| `SUPABASE_URL` | `https://<项目ID>.supabase.co` |
+| `SUPABASE_SERVICE_ROLE_KEY` | Project Settings → API 里的 `service_role` key（**不是** anon key） |
 
-仓库里的 `.replit` 已配好 Ruby 环境依赖（含 sqlite 系统库）、启动命令和端口（3000），无需改任何代码。Replit 会自动构建并给出一个公开 URL（形如 `https://gram-int.<你的用户名>.repl.co`），转发给别人即可访问。
+**4. 创建管理员账户**
+```sh
+SUPABASE_URL=https://<项目ID>.supabase.co \
+SUPABASE_SERVICE_ROLE_KEY=<service_role key> \
+./supabase/seed-admin.sh admin 'YourStrongPassword123'
+```
+输出会给出管理员的专属邀请码，用户注册时需要它。
 
-演示版使用容器内 SQLite，**Replit 休眠或重建后数据会清空**，仅适合演示；同时 URL 是公开的，建议在 Replit 的 Secrets 里设置 `GRAM_ADMIN_PASSWORD` 覆盖默认管理员密码。
+**5. 部署前端**
 
-## 注意事项
+```sh
+git add supabase-config.js index.html admin.html
+git commit -m "Point frontend at Supabase"
+git push
+```
+然后把仓库连到 GitHub Pages 或 Cloudflare Pages 即可。前端只负责加载静态文件，所有 `/api` 请求会跨域发送到 Supabase（Edge Function 已开启 CORS，Cookie 已按跨站要求配置）。
 
-- **必须设置 `DATABASE_URL`**。容器文件系统是临时的，重启或重新部署后 SQLite 数据会全部丢失。
-- **必须覆盖 `GRAM_ADMIN_PASSWORD`**。代码里的默认密码是公开的，不覆盖等于后台敞开。
-- 免费实例休眠期间首次访问会等待数十秒，属正常现象；如需常驻可升级到付费实例。
+### 本地开发
 
-### 也支持其他平台
+`supabase-config.js` 中 `GRAM_API_BASE` 留空时，前端仍请求同源 `/api`，可继续用 `ruby server.rb` 本地运行（两种后端可随时切换）。
 
-`Dockerfile` 是通用的，Hugging Face Spaces（需把 `ENV PORT` 改为 7860）、Koyeb、Google Cloud Run 均可直接复用。
+### 数据迁移说明
 
-### 关于 Supabase 的说明
-
-Supabase 不提供 Ruby 运行环境（仅 PostgreSQL / Auth / 边缘函数），无法直接托管本平台的后端服务，但非常适合作为**数据库层**：把 `DATABASE_URL` 指向 Supabase 免费库的连接串即可。若希望完全迁到 Supabase（含边缘函数重写全部后端逻辑），需要重写约 1500 行业务代码并把权限模型迁移到数据库层，工作量和风险都远大于此方案。
+新库从零开始，不会带上旧 SQLite 里的账户与余额。如需迁移历史数据，可先把 `data/gram.sqlite3` 导出为 CSV，再用 Supabase 控制台的 Table Editor 导入对应表。
 
 ## 项目文件
 
@@ -94,5 +116,7 @@ Supabase 不提供 Ruby 运行环境（仅 PostgreSQL / Auth / 边缘函数）�
 - `db.rb`：数据库适配层，统一封装 SQLite 与 PostgreSQL（连接、占位符、事务、异常）
 - `server.rb`：Ruby/WEBrick API、会话、业务规则、审计和持久化
 - `data/gram.sqlite3`：本机运行时自动创建的 SQLite 数据库（不提交）
-- `Gemfile` / `Dockerfile` / `.dockerignore` / `render.yaml` / `.replit`：依赖声明、容器化镜像与部署配置（Render 生产 / Replit 演示）
+- `Gemfile` / `Dockerfile` / `.dockerignore` / `render.yaml` / `.replit`：本地 Ruby 后端、容器镜像与部署配置（保留原方案）
+- `supabase/`：Postgres 迁移、Edge Functions 与一键部署脚本（现行 Supabase 方案）
+- `supabase-config.js`：前端后端寻址开关（留空走本地 Ruby，填写则指向 Supabase）
 - `favicon.svg`：GRAM 网站图标

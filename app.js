@@ -16,6 +16,28 @@ function poolName(rule) {
 let csrfToken = "";
 let authenticatedUsername = "";
 let lastStateSyncAt = 0;
+
+/* ============ 后端寻址 ============
+ * 默认请求同源的 /api（本地 ruby server.rb 或自托管后端）。
+ * 部署到 Supabase 时，在 supabase.js 中设置 window.GRAM_API_BASE 即可，
+ * 例如 window.GRAM_API_BASE = "https://<项目>.supabase.co/functions/v1/api"；
+ * 所有业务调用点无需任何改动。 */
+function apiBase() {
+  const configured = window.GRAM_API_BASE;
+  if (configured) return String(configured).replace(/\/+$/, "");
+  return "";
+}
+
+function apiUrl(path) {
+  const base = apiBase();
+  return base ? `${base}${path}` : path;
+}
+
+/* 跨域请求 Supabase 时必须带上 Cookie；
+   同源（本地后端）用 same-origin 避免额外预检。 */
+function apiCredentials() {
+  return apiBase() ? "include" : "same-origin";
+}
 const apiPendingRounds = new Set();
 
 async function apiRequest(path, options = {}) {
@@ -23,9 +45,9 @@ async function apiRequest(path, options = {}) {
   const headers = { Accept: "application/json", ...(options.headers || {}) };
   if (options.body !== undefined) headers["Content-Type"] = "application/json";
   if (["POST", "PATCH", "PUT", "DELETE"].includes(method) && csrfToken) headers["X-CSRF-Token"] = csrfToken;
-  const response = await fetch(path, {
+  const response = await fetch(apiUrl(path), {
     method,
-    credentials: "same-origin",
+    credentials: apiCredentials(),
     headers,
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
   });
