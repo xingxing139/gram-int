@@ -1,4 +1,4 @@
-# Hugging Face Spaces / Koyeb / Cloud Run 通用镜像
+# 容器镜像：Render / Koyeb / Cloud Run / Hugging Face Spaces 通用
 # Ruby 3.x + PostgreSQL 驱动；默认以 SQLite 运行，设置 DATABASE_URL 即切换 PostgreSQL
 FROM ruby:3.2-slim
 
@@ -16,8 +16,8 @@ RUN bundle install --jobs 4 --retry 3
 COPY . .
 
 # 云平台要求监听所有网卡。
-# 默认端口 7860 供 Hugging Face Spaces 使用；Koyeb / Cloud Run 会在运行时
-# 注入自己的 $PORT，该环境变量优先级高于此处的 ENV，无需改动即可通用。
+# 默认端口 7860：Render 等平台按容器 EXPOSE 端口路由；Koyeb / Cloud Run 会在
+# 运行时注入自己的 $PORT，其优先级高于此处的 ENV，无需改动即可通用。
 ENV BIND_ADDRESS=0.0.0.0
 ENV PORT=7860
 EXPOSE 7860

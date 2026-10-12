@@ -1,0 +1,23 @@
+# Render 免费档部署配置（Blueprint）
+# 用法：Render 控制台 → New → Blueprint → 选择本仓库
+#
+# 注意：Web Service 使用 free 计划不产生费用（512MB 内存，15 分钟无请求后休眠，
+# 下次访问需 30–50 秒唤醒）。数据库使用 Neon 免费 PostgreSQL，不依赖 Render
+# 那个 90 天有效期的免费库。
+services:
+  - type: web
+    name: gram-collectibles
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    # 镜像内已声明 EXPOSE 7860，Render 会自动路由到该端口
+    envVars:
+      - key: BIND_ADDRESS
+        value: 0.0.0.0
+      - key: RACK_ENV
+        value: production
+      # 以下变量请在 Render 控制台手工填写，不要提交进仓库：
+      # - DATABASE_URL          → Neon 连接串（必填，否则重启后数据全部丢失）
+      # - GRAM_ADMIN_USERNAME   → 管理员账户名
+      # - GRAM_ADMIN_PASSWORD   → 至少 12 位的强密码（必填，覆盖代码默认值）
