@@ -1,0 +1,34 @@
+# Replit 配置 —— 临时演示用，无需绑定信用卡
+#
+# 作用：在 Replit 的 Nix 环境里装好 Ruby，启动 server.rb 并把端口固定为 3000
+#      （Replit 的 Webview 约定端口），外网通过 repl.co 域名访问。
+# 使用方式：replit.com -> Create Repl -> Import from GitHub -> 粘贴仓库地址，
+#      然后点 Run。无需改动任何业务代码。
+#
+# 注意：演示使用容器内 SQLite，Replit 重启或休眠后数据可能清空，
+#      仅用于演示，不建议存放真实数据。
+#      生产部署请改用 render.yaml + Neon 方案。
+
+run = "bundle install --without postgres && ruby server.rb"
+entrypoint = "server.rb"
+
+[nix]
+channel = "stable-24.05"
+packages = ["ruby", "sqlite", "libyaml", "zlib", "openssl"]
+
+[env]
+PORT = "3000"
+BIND_ADDRESS = "0.0.0.0"
+GRAM_DATABASE = "./data/gram.sqlite3"
+
+# 跳过 Replit 的自动依赖安装，改由上面 run 命令里的 bundle install 处理
+[packager]
+language = "ruby"
+skipInstall = true
+
+[unitTest]
+language = "ruby"
+ignore = ["test_backend.rb"]
+
+[languages.ruby]
+pattern = "**/*.rb"

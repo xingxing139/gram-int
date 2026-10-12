@@ -61,7 +61,19 @@ ruby server.rb
 
 4. 保存后 Render 自动重新部署，完成后分配 `https://xxx.onrender.com` 域名，管理后台路径为 `/admin.html`
 
-### 注意事项
+#### 零成本快速演示（Replit，无需绑卡）
+
+如果只是想先把项目跑起来给别人看，不想配置任何平台，用 Replit 最简单：
+
+1. <https://replit.com> 用 GitHub 登录（免费，不需要信用卡）
+2. **Create Repl** → **Import from GitHub** → 填 `https://github.com/xingxing139/gram-int`
+3. 直接点 **Run**
+
+仓库里的 `.replit` 已配好 Ruby 环境依赖（含 sqlite 系统库）、启动命令和端口（3000），无需改任何代码。Replit 会自动构建并给出一个公开 URL（形如 `https://gram-int.<你的用户名>.repl.co`），转发给别人即可访问。
+
+演示版使用容器内 SQLite，**Replit 休眠或重建后数据会清空**，仅适合演示；同时 URL 是公开的，建议在 Replit 的 Secrets 里设置 `GRAM_ADMIN_PASSWORD` 覆盖默认管理员密码。
+
+## 注意事项
 
 - **必须设置 `DATABASE_URL`**。容器文件系统是临时的，重启或重新部署后 SQLite 数据会全部丢失。
 - **必须覆盖 `GRAM_ADMIN_PASSWORD`**。代码里的默认密码是公开的，不覆盖等于后台敞开。
@@ -82,5 +94,5 @@ Supabase 不提供 Ruby 运行环境（仅 PostgreSQL / Auth / 边缘函数）�
 - `db.rb`：数据库适配层，统一封装 SQLite 与 PostgreSQL（连接、占位符、事务、异常）
 - `server.rb`：Ruby/WEBrick API、会话、业务规则、审计和持久化
 - `data/gram.sqlite3`：本机运行时自动创建的 SQLite 数据库（不提交）
-- `Gemfile` / `Dockerfile` / `.dockerignore` / `render.yaml`：依赖声明、容器化镜像与 Render 部署配置
+- `Gemfile` / `Dockerfile` / `.dockerignore` / `render.yaml` / `.replit`：依赖声明、容器化镜像与部署配置（Render 生产 / Replit 演示）
 - `favicon.svg`：GRAM 网站图标
