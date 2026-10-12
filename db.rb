@@ -160,11 +160,146 @@ module GRAMDB
     end
   end
 
+  # SQLite 模式的 `CAST(x AS TEXT)` 在 MySQL 必须写成 `CAST(x AS CHAR)`。
+  # 业务层统一按 SQLite 风格书写，这里在 MySQL 执行前统一替换。
+  def translate_dialect(sql)
+    sql
+  end
+
+  # MySQL 适配器
+  # 说明：
+  #   1. mysql2 不支持 `?` 占位符，这里按「字符串感知」的方式把 ? 替换为
+  #      已转义字面量（escape 会正确处理 nil / 数字 / 布尔 / 字符串）
+  #   2. 事务用显式 BEGIN / COMMIT / ROLLBACK，配合 SELECT ... FOR UPDATE
+  #      行锁，与 Supabase 版存储过程达到同等的并发安全性
+  class MySQL < Base
+    def initialize(url)
+      @kind = :mysql
+      require "mysql2"
+      require "uri"
+      require "cgi"
+      uri = URI(url)
+      @raw = Mysql2::Client.new(
+        host: uri.host || "127.0.0.1",
+        port: uri.port || 3306,
+        username: uri.user ? CGI.unescape(uri.user) : "root",
+        password: uri.password ? CGI.unescape(uri.password) : nil,
+        database: uri.path.sub(%r{\A/}, ""),
+        encoding: "utf8mb4",
+        reconnect: true,
+      )
+      @in_transaction = false
+    end
+
+    # MySQL 方言转换：CAST(x AS TEXT) → CAST(x AS CHAR)
+    def translate_dialect(sql)
+      sql.gsub(/\bAS\s+TEXT\b/i, "AS CHAR")
+    end
+
+    def raw_execute(sql, binds)
+      @raw.query(interpolate(translate_dialect(sql), binds))
+    end
+
+    # 把 ? 替换为转义后的字面量；跳过单引号字符串内部的 ?
+    def interpolate(sql, binds)
+      return sql if binds.nil? || binds.empty?
+      values = binds.dup
+      output = +""
+      index = 0
+      in_string = false
+      while index < sql.length
+        char = sql[index]
+        if in_string
+          output << char
+          if char == "'"
+            if sql[index + 1] == "'"
+              output << sql[index + 1]
+              index += 2
+              next
+            end
+            in_string = false
+          end
+          index += 1
+          next
+        end
+        if char == "'"
+          in_string = true
+          output << char
+          index += 1
+          next
+        end
+        if char == "?"
+          output << escape_literal(values.shift)
+          index += 1
+          next
+        end
+        output << char
+        index += 1
+      end
+      output
+    end
+
+    # mysql2 的 escape 对字符串会自带单引号（如 'foo'），数字与 nil 也会正确处理，
+    # 因此这里不能再额外包一层引号，否则会出现 ''foo'' 这种双引号。
+    def escape_literal(value)
+      case value
+      when nil then "NULL"
+      when true then "1"
+      when false then "0"
+      when Integer, Float then value.to_s
+      else @raw.escape(value.to_s)
+      end
+    end
+
+    def transaction_active?
+      @in_transaction
+    end
+
+    def last_insert_row_id
+      @raw.query("SELECT LAST_INSERT_ID() AS id").first["id"].to_i
+    end
+
+    def execute_batch(sql)
+      sql.split(";").each do |statement|
+        next if statement.strip.empty?
+        @raw.query(statement)
+      end
+    end
+
+    def column_names(table)
+      @raw.query(
+        "SELECT COLUMN_NAME AS name FROM INFORMATION_SCHEMA.COLUMNS " \
+        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '#{@raw.escape(table)}' ORDER BY ORDINAL_POSITION"
+      ).map { |row| row["name"] }
+    end
+
+    def transaction
+      raise "nested transactions are not supported" if @in_transaction
+      @raw.query("SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED")
+      @raw.query("BEGIN")
+      @in_transaction = true
+      result = yield
+      @raw.query("COMMIT")
+      result
+    rescue StandardError
+      begin
+        @raw.query("ROLLBACK") if @in_transaction
+      rescue StandardError
+        nil
+      end
+      raise
+    ensure
+      @in_transaction = false
+    end
+  end
+
   def self.build
     url = ENV.fetch("DATABASE_URL", "").to_s.strip
     if url.empty? || url.start_with?("sqlite:")
       path = url.empty? ? ENV.fetch("GRAM_DATABASE", File.join(Dir.pwd, "data", "gram.sqlite3")) : url.sub(/\Asqlite:/, "")
       SQLite.new(path.empty? ? ":memory:" : path)
+    elsif url.start_with?("mysql2://", "mysql://")
+      MySQL.new(url.sub(/\Amysql:\/\//, "mysql2://"))
     else
       Postgres.new(url)
     end

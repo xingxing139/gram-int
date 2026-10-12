@@ -407,11 +407,19 @@ class GramService
   end
 
   # INSERT OR IGNORE 在 PostgreSQL 中写作 ON CONFLICT DO NOTHING
+  # INSERT OR IGNORE 的跨库写法：
+  #   SQLite    → INSERT OR IGNORE INTO
+  #   Postgres  → INSERT ... ON CONFLICT DO NOTHING
+  #   MySQL     → INSERT IGNORE INTO
   def insert_ignore(table, columns, binds)
-    placeholders = database.sqlite? ? (["?"] * columns.length).join(", ") : (1..columns.length).map { |index| "$#{index}" }.join(", ")
-    clause = database.sqlite? ? "INSERT OR IGNORE INTO" : "INSERT INTO"
-    conflict = database.sqlite? ? "" : " ON CONFLICT DO NOTHING"
-    execute("#{clause} #{table} (#{columns.join(', ')}) VALUES (#{placeholders})#{conflict}", *binds)
+    if database.sqlite?
+      execute("INSERT OR IGNORE INTO #{table} (#{columns.join(', ')}) VALUES (#{(['?'] * columns.length).join(', ')})", *binds)
+    elsif database.mysql?
+      execute("INSERT IGNORE INTO #{table} (#{columns.join(', ')}) VALUES (#{(['?'] * columns.length).join(', ')})", *binds)
+    else
+      placeholders = (1..columns.length).map { |index| "$#{index}" }.join(", ")
+      execute("INSERT INTO #{table} (#{columns.join(', ')}) VALUES (#{placeholders}) ON CONFLICT DO NOTHING", *binds)
+    end
   end
 
   def seed_defaults
