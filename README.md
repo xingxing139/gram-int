@@ -1,3 +1,14 @@
+---
+title: GRAM 数字典藏平台
+emoji: "💎"
+colorFrom: indigo
+colorTo: blue
+sdk: docker
+app_port: 7860
+pinned: false
+license: mit
+---
+
 # GRAM 数字典藏平台
 
 本地运行的全栈平台：Ruby/WEBrick 后端、SQLite 数据库，以及适配手机和桌面的响应式前端（桌面端为交易所风格布局）。包括服务端注册/登录（需邀请码）、账户余额及交易记录、八级铸造池、礼物目录、用户典藏/出租/生息和受权限保护的多模块管理后台。新注册账户初始余额为 0，充值需经后台审核确认后入账。
@@ -30,46 +41,56 @@ ruby server.rb
 
 适配层负责占位符转换（`?` → `$1, $2`）、布尔值归一、异常归一（唯一/外键冲突统一为 409）与两种库的 schema 差异（`INTEGER PRIMARY KEY AUTOINCREMENT` ↔ `BIGSERIAL`）。
 
-## 部署到免费平台（Koyeb + Neon，无需信用卡）
+## 部署到免费平台（Hugging Face Spaces，无需信用卡）
 
-推荐组合：**Koyeb 免费 Web Service 运行容器** + **Neon 免费 PostgreSQL**。全程不需要信用卡，无冷启动休眠，推送 GitHub 后可自动部署。
+推荐组合：**Hugging Face Spaces 免费 CPU 档运行容器** + **Neon 免费 PostgreSQL**。不需要信用卡，资源为 2 vCPU / 16GB 内存，复用仓库根目录的 `Dockerfile`。
 
-仓库已提供 `Dockerfile` 和 `.dockerignore`，Koyeb 会用它构建镜像（也可用于 Hugging Face Spaces、Cloud Run）。
+Space 创建后任何人都能访问你的应用（Hugging Face 不提供访问控制），因此 `GRAM_ADMIN_PASSWORD` 必须设置为强密码，且建议只在此实例上存放可公开演示的数据。
 
 ### 第一步：创建免费数据库（Neon）
 
 1. 打开 <https://neon.tech> 用 GitHub 登录，创建一个 Project
-2. 在 Project 的 Dashboard 复制 **Connection string**，形如
+2. 在 Project Dashboard 复制 **Connection string**，形如
    `postgres://user:password@ep-xxx.us-east-2.aws.neon.tech/dbname?sslmode=require`
 3. 该连接串即稍后要填的 `DATABASE_URL`
 
-免费额度为 0.5GB 存储；闲置 5 分钟后计算实例会自动暂停，下次访问数秒内唤醒，不影响数据。
+免费额度 0.5GB 存储；闲置约 5 分钟后计算实例自动暂停，下次访问数秒内唤醒，数据不受影响。
 
-### 第二步：部署到 Koyeb
+### 第二步：创建 Space 并连接仓库
 
-1. 打开 <https://app.koyeb.com> 用 GitHub 登录
-2. **Create Service** → 选择 GitHub 仓库 `xingxing139/gram-int`
-3. Builder 选 **Dockerfile**（会自动识别仓库根目录的 Dockerfile）
-4. 配置项：
-   - **Port**：`8000`（容器内由 `$PORT` 注入；若平台默认其他端口以控制台为准）
-   - **Health check**：路径填 `/api/health`，端口与外网端口一致
-   - **Instance**：选 Free 档（256MB 内存 / 0.1 vCPU）
-5. **Environment variables** 添加以下变量（Secret 类型会加密存储）：
+1. 打开 <https://huggingface.co/new-space>
+2. 填写 Space 名称（如 `gram-collectibles`），**License** 选 `mit`
+3. **SDK 选择 Docker**
+4. 创建后进入 Space  **Settings**：
+   - **App port** 填 `7860`（与 README front matter 中的 `app_port` 一致）
+   - **Public / Private**：Private 可隐藏代码，但应用页面仍需登录 HF 才能访问；需要公开访问请选 Public
+5. 在 Settings 页找到 **Git remote**，本地执行：
 
-   | 变量 | 值 |
-   |---|---|
-   | `DATABASE_URL` | 第一步的 Neon 连接串 |
-   | `BIND_ADDRESS` | `0.0.0.0` |
-   | `GRAM_ADMIN_USERNAME` | `admin` |
-   | `GRAM_ADMIN_PASSWORD` | 至少 12 位的强密码 |
+```sh
+git remote add hf https://huggingface.co/spaces/<你的用户名>/<space名称>
+git push hf main
+```
 
-6. 部署完成后 Koyeb 会分配一个 `https://xxx.koyeb.app` 域名，首页与管理后台（`/admin.html`）即可访问
+推送后 HF 会自动用 Dockerfile 构建镜像（包含 `bundle install`，首次约 3–6 分钟）。
+
+### 第三步：配置环境变量（Secrets）
+
+Space 构建完成后，在 **Settings → Variables and secrets** 中添加：
+
+| 变量 | 值 |
+|---|---|
+| `DATABASE_URL` | 第一步的 Neon 连接串 |
+| `BIND_ADDRESS` | `0.0.0.0` |
+| `GRAM_ADMIN_USERNAME` | `admin` |
+| `GRAM_ADMIN_PASSWORD` | 至少 12 位的强密码 |
+
+标记为 **Secret** 会自动加密，不会出现在日志或仓库中。添加后 Space 会重启生效，之后访问分配的 `https://<用户名>-<space名称>.hf.space` 即可，管理后台路径为 `/admin.html`。
 
 ### 注意事项
 
-- **务必设置 `DATABASE_URL`**。免费平台的文件系统是临时的，重启或重新部署后容器内 SQLite 数据会全部丢失。
-- 管理员密码必须通过环境变量覆盖代码里的默认值，否则任何拿到仓库的人都能登录后台。
-- 若使用 Hugging Face Spaces 代替 Koyeb，需把容器端口改为 `7860`，并在 Space 的 README 顶部添加 Spaces 配置。
+- **必须设置 `DATABASE_URL`**。容器文件系统是临时的，重启或重新构建后 SQLite 数据会全部丢失。
+- Space 在闲置约 48 小时后会进入睡眠，下次访问需要几十秒唤醒；如需常驻考虑升级硬件（付费）或改用 Oracle Cloud 永久免费实例。
+- README 顶部的 YAML front matter 是 HF 的 Space 配置，请勿删除。
 
 ### 关于 Supabase 的说明
 
