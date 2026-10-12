@@ -1,2 +1,5 @@
 .DS_Store
 Thumbs.db
+data/
+# Kilo 工具本地配置，与应用无关
+.kilo/

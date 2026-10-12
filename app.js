@@ -1,13 +1,44 @@
 const poolRules = {
-  1: { name: "初级池", minimum: 10, balance: 100, duration: 60 },
-  2: { name: "进阶池", minimum: 50, balance: 600, duration: 120 },
-  3: { name: "精英池", minimum: 300, balance: 2000, duration: 180 },
-  4: { name: "大师池", minimum: 800, balance: 7000, duration: 240 },
-  5: { name: "星环池", minimum: 2000, balance: 20000, duration: 300 },
-  6: { name: "深空池", minimum: 5000, balance: 50000, duration: 360 },
-  7: { name: "奇点池", minimum: 10000, balance: 100000, duration: 420 },
-  8: { name: "创世池", minimum: 20000, balance: 200000, duration: 480 },
+  1: { name: "初级池", nameKey: "pool.lv1", minimum: 10, balance: 100, duration: 60 },
+  2: { name: "进阶池", nameKey: "pool.lv2", minimum: 50, balance: 600, duration: 120 },
+  3: { name: "精英池", nameKey: "pool.lv3", minimum: 300, balance: 2000, duration: 180 },
+  4: { name: "大师池", nameKey: "pool.lv4", minimum: 800, balance: 7000, duration: 240 },
+  5: { name: "星环池", nameKey: "pool.lv5", minimum: 2000, balance: 20000, duration: 300 },
+  6: { name: "深空池", nameKey: "pool.lv6", minimum: 5000, balance: 50000, duration: 360 },
+  7: { name: "奇点池", nameKey: "pool.lv7", minimum: 10000, balance: 100000, duration: 420 },
+  8: { name: "创世池", nameKey: "pool.lv8", minimum: 20000, balance: 200000, duration: 480 },
 };
+
+function poolName(rule) {
+  return rule && rule.nameKey ? t(rule.nameKey) : (rule ? rule.name : "");
+}
+
+let csrfToken = "";
+let authenticatedUsername = "";
+let lastStateSyncAt = 0;
+const apiPendingRounds = new Set();
+
+async function apiRequest(path, options = {}) {
+  const method = options.method || "GET";
+  const headers = { Accept: "application/json", ...(options.headers || {}) };
+  if (options.body !== undefined) headers["Content-Type"] = "application/json";
+  if (["POST", "PATCH", "PUT", "DELETE"].includes(method) && csrfToken) headers["X-CSRF-Token"] = csrfToken;
+  const response = await fetch(path, {
+    method,
+    credentials: "same-origin",
+    headers,
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+  });
+  let result = {};
+  try {
+    result = await response.json();
+  } catch (error) {
+    if (response.ok) throw new Error(t("api.badPayload"));
+  }
+  if (!response.ok) throw new Error(result.error || t("api.requestFailed", { status: response.status }));
+  if (result.csrfToken) csrfToken = result.csrfToken;
+  return result;
+}
 
 const amountInput = document.querySelector("#mint-amount");
 const amountFeedback = document.querySelector("[data-amount-feedback]");
@@ -16,37 +47,28 @@ const modal = document.querySelector("[data-modal]");
 const toast = document.querySelector("[data-toast-box]");
 const activityList = document.querySelector("[data-activity-list]");
 const selected = { level: 1, method: 1 };
-const storedWalletBalance = localStorage.getItem("gram-demo-balance");
-const storedPoolRounds = JSON.parse(localStorage.getItem("gram-demo-pool-rounds") || "{}");
 const wallet = {
-  balance: storedWalletBalance === null ? 128000 : Number(storedWalletBalance),
-  history: JSON.parse(localStorage.getItem("gram-demo-wallet-history") || "[]"),
+  balance: 0,
+  history: [],
+  requests: [],
 };
 const walletModal = document.querySelector("[data-wallet-modal]");
 const roundModal = document.querySelector("[data-round-modal]");
 const poolRounds = Object.fromEntries(
   Array.from({ length: 8 }, (_, index) => {
     const level = index + 1;
-    const savedRound = storedPoolRounds[level] || {};
-    const endsAt = Number(savedRound.endsAt) || 0;
-    const hasBet = Number.isSafeInteger(savedRound.betAmount) && savedRound.betAmount > 0;
-    const pendingSettlement = endsAt > 0 && !savedRound.settled && hasBet;
     return [level, {
-      endsAt: pendingSettlement ? endsAt : 0,
-      completed: savedRound.settled === true || (endsAt > 0 && !hasBet),
-      betAmount: hasBet ? savedRound.betAmount : 0,
-      profitAmount: Number.isSafeInteger(savedRound.profitAmount) && savedRound.profitAmount >= 0 ? savedRound.profitAmount : 0,
-      won: typeof savedRound.won === "boolean" ? savedRound.won : null,
-      method: Number(savedRound.method) === 2 ? 2 : 1,
-      startedAt: Number(savedRound.startedAt) || 0,
-      settled: savedRound.settled === true || !hasBet,
+      endsAt: 0,
+      completed: false,
+      betAmount: 0,
+      profitAmount: 0,
+      won: null,
+      method: 1,
+      startedAt: 0,
+      settled: true,
     }];
   }),
 );
-const activePoolLevel = Object.entries(poolRounds)
-  .filter(([, round]) => round.endsAt > Date.now())
-  .sort(([, first], [, second]) => second.endsAt - first.endsAt)[0]?.[0];
-if (activePoolLevel && poolRules[activePoolLevel]) selected.level = Number(activePoolLevel);
 let walletMode = "deposit";
 let walletOpener = null;
 let toastTimeout;
@@ -84,15 +106,7 @@ const giftSort = document.querySelector("[data-gift-sort]");
 const giftDetail = document.querySelector("[data-gift-detail]");
 const giftPageState = { filter: "all", category: "all", query: "", sort: "featured", limit: 8 };
 let activeGift = null;
-const storedHoldings = JSON.parse(localStorage.getItem("gram-demo-collection") || "[]");
-const holdings = Array.isArray(storedHoldings)
-  ? storedHoldings.filter((item) =>
-    item && typeof item.id === "string" &&
-    gifts.some((gift) => gift.slug === item.slug) &&
-    ["owned", "rental", "interest"].includes(item.status) &&
-    Number.isSafeInteger(item.earnedUnits) && item.earnedUnits >= 0 &&
-    Number.isFinite(item.startedAt) && item.startedAt >= 0)
-  : [];
+const holdings = [];
 let holdingsFilter = "all";
 const DEMO_COLLECTIBLE_VALUE = 10000;
 const DEMO_RENTAL_DAILY_RATE = 0.01;
@@ -116,16 +130,16 @@ function createGiftCard(gift, index, favorites) {
   preview.className = "collectible-art gift-image-link";
   preview.type = "button";
   preview.dataset.giftOpen = gift.slug;
-  preview.setAttribute("aria-label", `查看 ${gift.english} 礼物详情`);
+  preview.setAttribute("aria-label", t("gift.viewDetail", { name: gift.english }));
 
   const image = document.createElement("img");
   image.src = `https://fragment.com/file/gifts/${gift.slug}/thumb.webp`;
-  image.alt = `${gift.english} Telegram 礼物目录图片`;
+  image.alt = t("gift.altMain", { name: gift.english });
   image.loading = index < 4 ? "eager" : "lazy";
   image.decoding = "async";
   image.addEventListener("error", () => {
     preview.classList.add("image-unavailable");
-    image.alt = `${gift.english} 图片暂时无法加载`;
+    image.alt = t("gift.altError", { name: gift.english });
   }, { once: true });
 
   const serial = document.createElement("small");
@@ -147,7 +161,7 @@ function createGiftCard(gift, index, favorites) {
   favorite.type = "button";
   favorite.dataset.giftFavorite = gift.slug;
   favorite.setAttribute("aria-pressed", String(favorites.has(gift.slug)));
-  favorite.setAttribute("aria-label", favorites.has(gift.slug) ? `取消收藏 ${gift.english}` : `收藏 ${gift.english}`);
+  favorite.setAttribute("aria-label", favorites.has(gift.slug) ? t("gift.favRemoveAria", { name: gift.english }) : t("gift.favAddAria", { name: gift.english }));
   favorite.textContent = favorites.has(gift.slug) ? "♥" : "♡";
 
   const source = document.createElement("a");
@@ -185,7 +199,7 @@ function renderGifts() {
   document.querySelector("[data-all-count]").textContent = String(gifts.length);
   document.querySelector("[data-favorite-count]").textContent = String(favorites.size);
   document.querySelector("[data-gift-result]").textContent =
-    `显示 ${displayedGifts.length} / ${matchingGifts.length} 件礼物`;
+    t("gift.showCount", { shown: displayedGifts.length, total: matchingGifts.length });
   document.querySelector("[data-gift-empty]").hidden = matchingGifts.length > 0;
   document.querySelector("[data-load-more]").hidden = displayedGifts.length >= matchingGifts.length;
 }
@@ -209,14 +223,14 @@ function toggleFavorite(slug) {
   writeFavoriteSlugs(favorites);
   renderGifts();
   if (activeGift?.slug === slug) updateGiftDetailFavorite();
-  showToast(isFavorite ? "已取消收藏" : "已加入收藏");
+  showToast(isFavorite ? t("dyn.favoriteRemove") : t("dyn.favoriteAdd"));
 }
 
 function updateGiftDetailFavorite() {
   if (!activeGift) return;
   const isFavorite = readFavoriteSlugs().has(activeGift.slug);
   const button = document.querySelector("[data-detail-favorite]");
-  button.textContent = isFavorite ? "♥ 已收藏" : "♡ 收藏礼物";
+  button.textContent = isFavorite ? t("gift.favAddedLabel") : t("gd.favorite");
   button.setAttribute("aria-pressed", String(isFavorite));
 }
 
@@ -224,7 +238,7 @@ function updateGiftDetailAddButton() {
   if (!activeGift) return;
   const count = holdings.filter((item) => item.slug === activeGift.slug).length;
   document.querySelector("[data-detail-add]").textContent =
-    count > 0 ? `＋ 再添加一件 · 已有 ${count} 件` : "＋ 模拟加入我的典藏";
+    count > 0 ? t("gd.readd", { count }) : t("gd.add");
 }
 
 function openGiftDetail(slug) {
@@ -233,10 +247,10 @@ function openGiftDetail(slug) {
 
   const image = giftDetail.querySelector("[data-detail-image]");
   image.src = `https://fragment.com/file/gifts/${activeGift.slug}/thumb.webp`;
-  image.alt = `${activeGift.english} Telegram 礼物`;
+  image.alt = t("gift.altTelegram", { name: activeGift.english });
   giftDetail.querySelector("[data-detail-title]").textContent = `${activeGift.name} · ${activeGift.english}`;
   giftDetail.querySelector("[data-detail-description]").textContent =
-    "Telegram 礼物目录中的系列预览。礼物实物、稀有款式、价格和供应量请在来源页面查看。";
+    t("gift.detailDesc");
   giftDetail.querySelector("[data-detail-source]").href = `https://fragment.com/gifts/${activeGift.slug}`;
   updateGiftDetailFavorite();
   updateGiftDetailAddButton();
@@ -252,7 +266,7 @@ function closeGiftDetail() {
 }
 
 function saveHoldings() {
-  localStorage.setItem("gram-demo-collection", JSON.stringify(holdings));
+  return undefined;
 }
 
 function getHoldingEarnings(item, now = Date.now()) {
@@ -274,16 +288,16 @@ function createHoldingCard(item, index, now) {
   art.className = "collectible-art holding-art";
   const image = document.createElement("img");
   image.src = `https://fragment.com/file/gifts/${gift.slug}/thumb.webp`;
-  image.alt = `${gift.english} Telegram 礼物演示图`;
+  image.alt = t("gift.altFigure", { name: gift.english });
   image.loading = "lazy";
   image.decoding = "async";
   image.addEventListener("error", () => {
     art.classList.add("image-unavailable");
-    image.alt = `${gift.english} 图片暂时无法加载`;
+    image.alt = t("gift.altError", { name: gift.english });
   }, { once: true });
   const badge = document.createElement("small");
   badge.className = `holding-status ${item.status}`;
-  badge.textContent = item.status === "rental" ? "出租中" : item.status === "interest" ? "生息中" : "我的藏品";
+  badge.textContent = item.status === "rental" ? t("hold.rental") : item.status === "interest" ? t("hold.interest") : t("coll.myItem");
   art.append(image, badge);
 
   const info = document.createElement("div");
@@ -291,11 +305,11 @@ function createHoldingCard(item, index, now) {
   const title = document.createElement("strong");
   title.textContent = gift.name;
   const subtitle = document.createElement("span");
-  subtitle.textContent = `${gift.english} · 演示估值 100 G`;
+  subtitle.textContent = `${gift.english} · ${t("coll.valuation")}`;
   const earnings = document.createElement("div");
   earnings.className = "holding-earnings";
   const earningsLabel = document.createElement("span");
-  earningsLabel.textContent = "累计可领";
+  earningsLabel.textContent = t("coll.claimable");
   const earningsAmount = document.createElement("strong");
   earningsAmount.textContent = `${formatGram(getHoldingEarnings(item, now))} G`;
   earnings.append(earningsLabel, earningsAmount);
@@ -313,10 +327,10 @@ function createHoldingCard(item, index, now) {
     actions.append(button);
   };
   if (item.status === "owned") {
-    addAction("rental", "出租 1%/日", "holding-action-primary");
-    addAction("interest", "存入年化 8%", "holding-action-secondary");
+    addAction("rental", t("coll.rentalRate"), "holding-action-primary");
+    addAction("interest", t("coll.interestRate"), "holding-action-secondary");
   } else {
-    addAction("stop", "停止并取回", "holding-action-secondary");
+    addAction("stop", t("coll.stopAction"), "holding-action-secondary");
   }
 
   card.append(art, info, actions);
@@ -335,20 +349,20 @@ function renderMyCollection() {
   const interestCount = holdings.filter((item) => item.status === "interest").length;
   const claimButton = document.querySelector("[data-claim-earnings]");
 
-  document.querySelector("[data-holding-count]").textContent = `${holdings.length} 件`;
-  document.querySelector("[data-rented-count]").textContent = `${rentedCount} 件`;
-  document.querySelector("[data-interest-count]").textContent = `${interestCount} 件`;
-  document.querySelector("[data-profile-holding-count]").textContent = `${holdings.length} 件`;
+  document.querySelector("[data-holding-count]").textContent = t("coll.countUnit", { count: holdings.length });
+  document.querySelector("[data-rented-count]").textContent = t("coll.countUnit", { count: rentedCount });
+  document.querySelector("[data-interest-count]").textContent = t("coll.countUnit", { count: interestCount });
+  document.querySelector("[data-profile-holding-count]").textContent = t("coll.countUnit", { count: holdings.length });
   document.querySelector("[data-claimable-amount]").textContent = formatGram(totalEarnings);
   claimButton.disabled = totalEarnings <= 0;
   const emptyState = document.querySelector("[data-holdings-empty]");
   emptyState.hidden = visibleHoldings.length > 0;
   if (holdings.length === 0) {
-    emptyState.querySelector("strong").textContent = "这里还没有典藏品";
-    emptyState.querySelector("p").textContent = "从下方礼物图鉴选择藏品，加入本地演示典藏。";
+    emptyState.querySelector("strong").textContent = t("coll.emptyTitle");
+    emptyState.querySelector("p").textContent = t("coll.emptyDesc");
   } else if (visibleHoldings.length === 0) {
-    emptyState.querySelector("strong").textContent = "这个分类暂时为空";
-    emptyState.querySelector("p").textContent = "切换其他筛选，或从礼物图鉴添加演示藏品。";
+    emptyState.querySelector("strong").textContent = t("coll.emptyCategory");
+    emptyState.querySelector("p").textContent = t("coll.emptyFiltered");
   }
   grid.hidden = visibleHoldings.length === 0;
   grid.replaceChildren(...visibleHoldings.map((item, index) => createHoldingCard(item, index, now)));
@@ -368,52 +382,523 @@ function refreshMyCollectionEarnings() {
 
 function addActiveGiftToCollection() {
   if (!activeGift) return;
-  holdings.unshift({
-    id: `${activeGift.slug}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    slug: activeGift.slug,
-    status: "owned",
-    startedAt: 0,
-    earnedUnits: 0,
-  });
-  saveHoldings();
-  renderMyCollection();
-  showToast("已加入本地演示典藏");
+  apiRequest("/api/holdings", { method: "POST", body: { slug: activeGift.slug } })
+    .then((result) => {
+      applyServerState(result.state);
+      showToast(t("dyn.addedToCollection"));
+      updateGiftDetailAddButton();
+    })
+    .catch((error) => showToast(error.message));
 }
 
 function updateHoldingMode(id, mode) {
   const item = holdings.find((holding) => holding.id === id);
   if (!item) return;
-  if (mode === "stop") {
-    item.earnedUnits = getHoldingEarnings(item);
-    item.status = "owned";
-    item.startedAt = 0;
-    showToast("已停止并取回演示藏品");
-  } else {
-    item.status = mode;
-    item.startedAt = Date.now();
-    showToast(mode === "rental" ? "已开始模拟出租" : "已开始模拟存入生息");
-  }
-  saveHoldings();
-  renderMyCollection();
+  const status = mode === "stop" ? "owned" : mode;
+  apiRequest(`/api/holdings/${encodeURIComponent(id)}`, { method: "PATCH", body: { status } })
+    .then((state) => {
+      applyServerState(state);
+      showToast(status === "owned" ? t("dyn.stoppedOwned") : status === "rental" ? t("dyn.startedRental") : t("dyn.startedInterest"));
+    })
+    .catch((error) => showToast(error.message));
 }
 
 function claimCollectionEarnings() {
+  apiRequest("/api/holdings/claim", { method: "POST", body: {} })
+    .then((state) => {
+      applyServerState(state);
+      showToast(t("dyn.claimed", { amount: formatGram(state.claimedUnits) }));
+    })
+    .catch((error) => showToast(error.message));
+}
+
+function renderInvitation(user) {
+  const chip = document.querySelector("[data-invitation-card]");
+  const codeLabel = document.querySelector("[data-invitation-code]");
+  if (!chip || !codeLabel) return;
+  const code = user && user.invitationCode ? String(user.invitationCode).toUpperCase() : "";
+  chip.hidden = !code;
+  codeLabel.textContent = code || "•••••";
+}
+
+async function copyInvitationCode() {
+  const codeLabel = document.querySelector("[data-invitation-code]");
+  const code = codeLabel ? codeLabel.textContent : "";
+  if (!code || code === "•••••") return;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(code);
+    } else {
+      const helper = document.createElement("textarea");
+      helper.value = code;
+      helper.setAttribute("readonly", "");
+      helper.style.position = "fixed";
+      helper.style.opacity = "0";
+      document.body.append(helper);
+      helper.select();
+      document.execCommand("copy");
+      helper.remove();
+    }
+    showToast(t("prof.invitationCopied", { code }));
+  } catch (error) {
+    showToast(t("prof.invitationCopied", { code }));
+  }
+}
+
+document.querySelector("[data-invitation-copy]")?.addEventListener("click", copyInvitationCode);
+
+function applyServerState(state) {
+  wallet.balance = state.user.balanceUnits;
+  wallet.history = state.walletHistory;
+  depositAddresses = Array.isArray(state.depositAddresses) ? state.depositAddresses : [];
+  if (depositAddresses.length === 0) {
+    selectedDepositAddressId = null;
+  } else if (!depositAddresses.some((entry) => entry.id === selectedDepositAddressId)) {
+    [selectedDepositAddressId] = depositAddresses.map((entry) => entry.id);
+  }
+  wallet.requests = state.walletRequests || [];
+  holdings.splice(0, holdings.length, ...state.holdings);
+  gifts.splice(0, gifts.length, ...state.gifts);
+  state.holdings.forEach((item) => {
+    if (!gifts.some((gift) => gift.slug === item.slug)) {
+      gifts.push({ slug: item.slug, name: item.itemName || item.slug, english: item.english || item.slug, category: "other", active: false });
+    }
+  });
+  csrfToken = state.csrfToken;
+
+  state.poolRules.forEach((rule) => {
+    Object.assign(poolRules[rule.level], {
+      minimum: rule.minimumUnits / 100,
+      balance: rule.entryUnits / 100,
+      duration: rule.duration,
+      profitPercent: rule.profitPercent,
+      winProbabilityBp: rule.winProbabilityBp,
+      enabled: rule.enabled,
+    });
+  });
+
+  Object.keys(poolRounds).forEach((level) => {
+    const round = state.rounds.find((entry) => entry.level === Number(level));
+    Object.assign(poolRounds[level], round ? {
+      id: round.id,
+      endsAt: round.endsAt,
+      completed: round.completed,
+      settled: round.settled,
+      betAmount: round.betAmount,
+      profitAmount: round.profitAmount || 0,
+      won: round.won,
+      method: round.method,
+      startedAt: round.startedAt,
+      winProbabilityBp: round.winProbabilityBp,
+      profitPercent: round.profitPercent,
+      fairnessCommitment: round.fairnessCommitment,
+      fairnessSecret: round.fairnessSecret,
+      fairnessNonce: round.fairnessNonce,
+      fairnessDraw: round.fairnessDraw,
+    } : {
+      id: null,
+      endsAt: 0,
+      completed: false,
+      settled: true,
+      betAmount: 0,
+      profitAmount: 0,
+      won: null,
+      method: 1,
+      startedAt: 0,
+      winProbabilityBp: poolRules[level].winProbabilityBp,
+      profitPercent: poolRules[level].profitPercent,
+      fairnessCommitment: null,
+      fairnessSecret: null,
+      fairnessNonce: null,
+    });
+  });
+
+  if (state.user.role === "admin") {
+    document.querySelector("[data-admin-entry]").hidden = false;
+  } else if (state.user.role === "agent") {
+    document.querySelector("[data-admin-entry]").hidden = false;
+  } else {
+    document.querySelector("[data-admin-entry]").hidden = true;
+  }
+
+  renderInvitation(state.user);
+  renderGifts();
+  renderWallet();
+  activityList.replaceChildren();
+  renderSavedRoundActivity();
+}
+
+async function refreshServerState() {
+  const state = await apiRequest("/api/state");
+  applyServerState(state);
+  lastStateSyncAt = Date.now();
+  return state;
+}
+
+/* ============ TON 行情图（真实数据源 + 本地兜底） ============ */
+/* 数据源按顺序尝试：CoinGecko → Binance → 本地模拟序列。
+   前两者均为免费公开行情接口，无需 API Key 且对浏览器开放跨域(CORS)访问；
+   任一源请求失败、超时或返回异常数据时自动降级到下一个源，全部失败时使用本地序列，
+   并在右上角标签中显示当前数据来源（实时 / 演示），页面不会白屏。 */
+const CHART_SOURCES = [
+  {
+    id: "coingecko",
+    liveLabel: "coingecko",
+    buildUrl: (range) => {
+      const days = range === "24H" ? 1 : range === "7D" ? 7 : 30;
+      return `https://api.coingecko.com/api/v3/coins/the-open-network/market_chart?vs_currency=usd&days=${days}`;
+    },
+    parse: (payload) => {
+      if (!payload || !Array.isArray(payload.prices)) return null;
+      const volumes = Array.isArray(payload.total_volumes) ? payload.total_volumes : [];
+      return payload.prices
+        .map((point, index) => ({
+          time: Number(point[0]),
+          price: Number(point[1]),
+          volume: volumes[index] ? Number(volumes[index][1]) : 0,
+        }))
+        .filter((point) => point.time > 0 && point.price > 0);
+    },
+  },
+  {
+    id: "binance",
+    liveLabel: "binance",
+    buildUrl: (range) => {
+      const plan = {
+        "24H": { interval: "15m", limit: 96 },
+        "7D": { interval: "2h", limit: 84 },
+        "30D": { interval: "8h", limit: 90 },
+      }[range];
+      return `https://api.binance.com/api/v3/klines?symbol=TONUSDT&interval=${plan.interval}&limit=${plan.limit}`;
+    },
+    parse: (payload) => {
+      if (!Array.isArray(payload)) return null;
+      return payload
+        .map((row) => ({
+          time: Number(row[0]),
+          price: Number(row[4]),
+          volume: Number(row[7]),
+        }))
+        .filter((point) => point.time > 0 && point.price > 0);
+    },
+  },
+];
+const CHART_REQUEST_TIMEOUT = 9000;
+const CHART_POLL_INTERVAL = 25000;
+const CHART_BASE_PRICE = 2.35;
+const CHART_RANGES = {
+  "24H": { points: 72, stepMs: 20 * 60 * 1000, volatility: 0.0013, volume: 428.6, ma: 7 },
+  "7D": { points: 84, stepMs: 2 * 60 * 60 * 1000, volatility: 0.0028, volume: 2913.4, ma: 7 },
+  "30D": { points: 90, stepMs: 8 * 60 * 60 * 1000, volatility: 0.0042, volume: 12480.7, ma: 7 },
+};
+const CHART_GEOMETRY = { width: 320, top: 14, bottom: 104, volumeTop: 112, volumeBottom: 142 };
+const chartState = { range: "24H", series: [], source: null };
+const chartCache = new Map();
+
+function seededRandom(seed) {
+  let value = seed;
+  return () => {
+    value = (value * 1103515245 + 12345) & 0x7fffffff;
+    return value / 0x7fffffff;
+  };
+}
+
+function buildChartSeries(range) {
+  const config = CHART_RANGES[range];
+  const seed = range.split("").reduce((total, char) => total + char.charCodeAt(0), 7) * 31;
+  const random = seededRandom(seed);
+  const drift = (random() - 0.42) * config.volatility * config.points * 0.5;
+  let price = CHART_BASE_PRICE * (1 - drift * 0.5);
+  const series = [];
   const now = Date.now();
-  const totalEarnings = holdings.reduce((sum, item) => sum + getHoldingEarnings(item, now), 0);
-  if (totalEarnings <= 0) {
-    showToast("当前暂无可领取的演示收益");
+  for (let index = 0; index < config.points; index += 1) {
+    const wave = Math.sin(index / config.points * Math.PI * 2.2) * config.volatility * 6;
+    const shock = (random() - 0.5) * config.volatility * 9;
+    price = price * (1 + wave * 0.16 + shock);
+    price = Math.max(price, CHART_BASE_PRICE * 0.72);
+    const baseVolume = config.volume / config.points;
+    series.push({
+      time: now - (config.points - 1 - index) * config.stepMs,
+      price: Number(price.toFixed(2)),
+      volume: Number((baseVolume * (0.55 + random() * 0.9)).toFixed(1)),
+    });
+  }
+  series[series.length - 1].price = Number(CHART_BASE_PRICE.toFixed(2));
+  return series;
+}
+
+async function fetchRemoteSeries(range, force = false) {
+  if (!force && chartCache.has(range)) return chartCache.get(range);
+  for (const source of CHART_SOURCES) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), CHART_REQUEST_TIMEOUT);
+      const response = await fetch(source.buildUrl(range), {
+        signal: controller.signal,
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+      });
+      clearTimeout(timer);
+      if (!response.ok) continue;
+      const series = source.parse(await response.json());
+      if (series && series.length > 4) {
+        const payload = { series, source: source.id };
+        chartCache.set(range, payload);
+        return payload;
+      }
+    } catch (error) {
+      // 跨域被拦截、超时或网络不可用时继续尝试下一个数据源
+    }
+  }
+  return null;
+}
+
+async function resolveChartSeries(range, force = false) {
+  const remote = await fetchRemoteSeries(range, force);
+  if (remote) return remote;
+  return { series: buildChartSeries(range), source: "local" };
+}
+
+function formatChartPrice(value) {
+  const digits = Math.abs(value) < 10 ? 4 : 2;
+  return value.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
+function formatChartVolume(value) {
+  if (value >= 1_000_000_000) return `$${(value / 1_000_000_000).toFixed(2)}B`;
+  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;
+  if (value >= 1_000) return `$${(value / 1_000).toFixed(1)}K`;
+  return `$${value.toFixed(1)}`;
+}
+
+const CHART_SOURCE_LABELS = {
+  coingecko: "CoinGecko 实时",
+  binance: "Binance 实时",
+  local: "演示数据",
+};
+
+function renderChartSource() {
+  const pill = document.querySelector("[data-chart-source]");
+  if (!pill) return;
+  if (!chartState.source) {
+    pill.dataset.state = "loading";
+    const loadingLabel = pill.querySelector("span");
+    if (loadingLabel) loadingLabel.textContent = t("chart.loading");
+    pill.title = t("chart.liveTitle");
     return;
   }
-  holdings.forEach((item) => {
-    item.earnedUnits = 0;
-    if (item.status !== "owned") item.startedAt = now;
-  });
-  saveHoldings();
-  wallet.balance += totalEarnings;
-  addWalletHistory("collectible-reward", totalEarnings);
-  showToast(`已领取 ${formatGram(totalEarnings)} GRAM 演示收益`);
-  renderMyCollection();
+  const isLocal = chartState.source === "local";
+  pill.dataset.state = isLocal ? "demo" : "live";
+  const label = pill.querySelector("span");
+  if (label) label.textContent = CHART_SOURCE_LABELS[chartState.source] || t("chart.loading");
+  pill.title = isLocal ? t("chart.demoTitle") : t("chart.liveTitle");
 }
+
+function chartPointLabel(range, timestamp) {
+  const date = new Date(timestamp);
+  if (range === "24H") {
+    return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  }
+  return `${date.getMonth() + 1}/${date.getDate()}`;
+}
+
+function movingAverage(series, window) {
+  return series.map((point, index) => {
+    const start = Math.max(0, index - window + 1);
+    const slice = series.slice(start, index + 1);
+    const total = slice.reduce((sum, entry) => sum + entry.price, 0);
+    return { ...point, price: Number((total / slice.length).toFixed(2)) };
+  });
+}
+
+function seriesToPath(points, toX, toY) {
+  return points
+    .map((point, index) => `${index === 0 ? "M" : "L"}${toX(point, index).toFixed(2)} ${toY(point.price).toFixed(2)}`)
+    .join(" ");
+}
+
+function renderMarketChart() {
+  const figure = document.querySelector("[data-chart-figure]");
+  const svg = figure?.querySelector(".market-chart-svg");
+  if (!figure || !svg) return;
+  const labels = {
+    price: document.querySelector("[data-chart-price]"),
+    change: document.querySelector("[data-chart-change]"),
+    open: document.querySelector("[data-chart-open]"),
+    high: document.querySelector("[data-chart-high]"),
+    low: document.querySelector("[data-chart-low]"),
+    volume: document.querySelector("[data-chart-volume]"),
+    axisTop: document.querySelector("[data-chart-axis-top]"),
+    axisMid: document.querySelector("[data-chart-axis-mid]"),
+    axisBottom: document.querySelector("[data-chart-axis-bottom]"),
+    timeStart: document.querySelector("[data-chart-time-start]"),
+    timeMid: document.querySelector("[data-chart-time-mid]"),
+    timeEnd: document.querySelector("[data-chart-time-end]"),
+  };
+  if (!labels.price || !labels.change || !labels.open) return;
+
+  const series = chartState.series;
+  if (!series.length) return;
+  const config = CHART_RANGES[chartState.range];
+  const prices = series.map((point) => point.price);
+  const lowest = Math.min(...prices);
+  const highest = Math.max(...prices);
+  const span = highest - lowest || 1;
+  const { width, top, bottom, volumeTop, volumeBottom } = CHART_GEOMETRY;
+  const stepX = width / (series.length - 1);
+  const toX = (point, index) => index * stepX;
+  const toY = (value) => bottom - ((value - lowest) / span) * (bottom - top);
+
+  const linePath = seriesToPath(series, toX, toY);
+  const areaPath = `${linePath} L${width} ${bottom} L0 ${bottom} Z`;
+  const maSeries = movingAverage(series, config.ma);
+  const maPath = seriesToPath(maSeries, toX, toY);
+
+  svg.querySelector("[data-chart-area]").setAttribute("d", areaPath);
+  svg.querySelector("[data-chart-line]").setAttribute("d", linePath);
+  svg.querySelector("[data-chart-ma]").setAttribute("d", maPath);
+
+  const volumes = series.map((point) => point.volume);
+  const maxVolume = Math.max(...volumes, 1);
+  const barWidth = Math.max(stepX * 0.55, 1.4);
+  svg.querySelector("[data-chart-volumes]").innerHTML = series
+    .map((point, index) => {
+      const barHeight = Math.max((point.volume / maxVolume) * (volumeBottom - volumeTop), 1);
+      const x = Number((index * stepX - barWidth / 2).toFixed(2));
+      return `<rect x="${x}" y="${(volumeBottom - barHeight).toFixed(2)}" width="${barWidth.toFixed(2)}" height="${barHeight.toFixed(2)}" rx="0.8" fill="url(#gram-chart-volume)" />`;
+    })
+    .join("");
+
+  const latest = series[series.length - 1];
+  const opening = series[0].price;
+  const changePercent = ((latest.price - opening) / opening) * 100;
+  const totalVolume = series.reduce((sum, point) => sum + point.volume, 0);
+
+  labels.price.textContent = formatChartPrice(latest.price);
+  labels.price.dataset.price = formatChartPrice(latest.price);
+  labels.change.textContent = `${changePercent >= 0 ? "+" : ""}${changePercent.toFixed(2)}%`;
+  labels.change.classList.toggle("is-down", changePercent < 0);
+  labels.open.textContent = formatChartPrice(opening);
+  labels.high.textContent = formatChartPrice(highest);
+  labels.low.textContent = formatChartPrice(lowest);
+  labels.volume.textContent = formatChartVolume(totalVolume);
+  labels.axisTop.textContent = formatChartPrice(highest);
+  labels.axisMid.textContent = formatChartPrice((highest + lowest) / 2);
+  labels.axisBottom.textContent = formatChartPrice(lowest);
+  labels.timeStart.textContent = chartPointLabel(chartState.range, series[0].time);
+  labels.timeMid.textContent = chartPointLabel(chartState.range, series[Math.floor(series.length / 2)].time);
+  labels.timeEnd.textContent = chartPointLabel(chartState.range, latest.time);
+}
+
+function chartIsVisible() {
+  return Boolean(document.querySelector('[data-page-panel="mint"]')?.classList.contains("is-visible"));
+}
+
+function updateChartHover(event) {
+  const figure = document.querySelector("[data-chart-figure]");
+  const tip = document.querySelector("[data-chart-tip]");
+  if (!figure || !tip) return;
+  const rect = figure.getBoundingClientRect();
+  if (!rect.width) return;
+  const ratio = Math.min(Math.max((event.clientX - rect.left) / rect.width, 0), 1);
+  const series = chartState.series;
+  const index = Math.round(ratio * (series.length - 1));
+  const point = series[index];
+  const prices = series.map((entry) => entry.price);
+  const lowest = Math.min(...prices);
+  const highest = Math.max(...prices);
+  const span = highest - lowest || 1;
+  const { width, top, bottom } = CHART_GEOMETRY;
+  const x = Number((index * (width / (series.length - 1))).toFixed(2));
+  const y = Number((bottom - ((point.price - lowest) / span) * (bottom - top)).toFixed(2));
+
+  figure.classList.add("is-active");
+  figure.querySelector("[data-chart-cursor]").setAttribute("x1", String(x));
+  figure.querySelector("[data-chart-cursor]").setAttribute("x2", String(x));
+  figure.querySelector("[data-chart-dot]").setAttribute("cx", String(x));
+  figure.querySelector("[data-chart-dot]").setAttribute("cy", String(y));
+
+  tip.hidden = false;
+  tip.innerHTML = `<strong>${formatChartPrice(point.price)}</strong><span>${chartPointLabel(chartState.range, point.time)} · ${formatChartVolume(point.volume)}</span>`;
+  const tipWidth = tip.offsetWidth || 96;
+  const left = Math.min(Math.max((x / width) * rect.width, tipWidth / 2 + 4), rect.width - tipWidth / 2 - 4);
+  tip.style.left = `${left}px`;
+}
+
+function hideChartHover() {
+  const figure = document.querySelector("[data-chart-figure]");
+  const tip = document.querySelector("[data-chart-tip]");
+  if (figure) figure.classList.remove("is-active");
+  if (tip) tip.hidden = true;
+}
+
+async function switchChartRange(range) {
+  if (!CHART_RANGES[range]) return;
+  chartState.range = range;
+  document.querySelectorAll("[data-chart-range]").forEach((button) => {
+    const isActive = button.dataset.chartRange === range;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-selected", String(isActive));
+  });
+  hideChartHover();
+  const resolved = await resolveChartSeries(range);
+  chartState.series = resolved.series;
+  chartState.source = resolved.source;
+  renderChartSource();
+  renderMarketChart();
+}
+
+function initMarketChart() {
+  const figure = document.querySelector("[data-chart-figure]");
+  if (!figure) return;
+  chartState.series = buildChartSeries(chartState.range);
+  chartState.source = null;
+  renderChartSource();
+  renderMarketChart();
+
+  document.querySelectorAll("[data-chart-range]").forEach((button) => {
+    button.addEventListener("click", () => switchChartRange(button.dataset.chartRange));
+  });
+  figure.addEventListener("pointermove", updateChartHover);
+  figure.addEventListener("pointerdown", updateChartHover);
+  figure.addEventListener("pointerleave", hideChartHover);
+  figure.addEventListener("pointercancel", hideChartHover);
+
+  /* 首次加载拉取真实行情；失败则继续展示本地序列 */
+  resolveChartSeries(chartState.range).then((resolved) => {
+    chartState.series = resolved.series;
+    chartState.source = resolved.source;
+    renderChartSource();
+    renderMarketChart();
+  });
+
+  /* 演示数据模式下模拟价格跳动 */
+  setInterval(() => {
+    if (!chartIsVisible() || chartState.source !== "local") return;
+    const series = chartState.series;
+    if (!series.length) return;
+    const last = series[series.length - 1];
+    const jitter = (Math.random() - 0.5) * CHART_BASE_PRICE * 0.0016;
+    last.price = Number(Math.max(last.price + jitter, CHART_BASE_PRICE * 0.7).toFixed(4));
+    last.volume = Number(Math.max(last.volume * (0.9 + Math.random() * 0.25), 1).toFixed(1));
+    renderMarketChart();
+    hideChartHover();
+  }, 4000);
+
+  /* 真实行情模式下周期性刷新（拉取后写入缓存再读取，尊重接口频率限制） */
+  setInterval(() => {
+    if (!chartIsVisible() || chartState.source === "local") return;
+    resolveChartSeries(chartState.range, true).then((resolved) => {
+      if (resolved.source === "local") return;
+      chartState.series = resolved.series;
+      chartState.source = resolved.source;
+      renderChartSource();
+      renderMarketChart();
+    });
+  }, CHART_POLL_INTERVAL);
+}
+
+initMarketChart();
 
 renderGifts();
 renderMyCollection();
@@ -422,10 +907,10 @@ function setTheme(theme) {
   const isLight = theme === "light";
   document.documentElement.dataset.theme = isLight ? "light" : "dark";
   document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
-    button.setAttribute("aria-label", isLight ? "切换到黑色模式" : "切换到白色模式");
+    button.setAttribute("aria-label", isLight ? t("top.themeToDark") : t("top.themeToLight"));
     button.setAttribute("aria-pressed", String(isLight));
     const label = button.querySelector("[data-theme-name]");
-    if (label) label.textContent = isLight ? "白色模式" : "黑色模式";
+    if (label) label.textContent = isLight ? t("prof.themeLight") : t("prof.themeDark");
   });
   document.querySelector('meta[name="theme-color"]').content = isLight ? "#f2f4fa" : "#080b17";
 }
@@ -462,6 +947,100 @@ document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
 document.querySelectorAll("[data-page-link]").forEach((button) => {
   button.addEventListener("click", () => setPage(button.dataset.pageLink));
 });
+
+const languageModal = document.querySelector("[data-language-modal]");
+const languageOptions = document.querySelector("[data-language-options]");
+const currentLanguageLabel = document.querySelector("[data-current-language]");
+
+function languageInfo(code) {
+  return LANGUAGES.find((item) => item.code === code) || LANGUAGES[0];
+}
+
+function updateCurrentLanguageLabel() {
+  if (!currentLanguageLabel) return;
+  const info = languageInfo(getLanguage());
+  currentLanguageLabel.textContent = `${info.native}　›`;
+}
+
+function renderLanguageOptions() {
+  if (!languageOptions) return;
+  const active = getLanguage();
+  languageOptions.replaceChildren(
+    ...LANGUAGES.map((item) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "language-option" + (item.code === active ? " is-active" : "");
+      button.setAttribute("aria-pressed", String(item.code === active));
+      const flag = document.createElement("span");
+      flag.className = "language-option-flag";
+      flag.textContent = item.flag;
+      const copy = document.createElement("span");
+      copy.className = "language-option-copy";
+      const native = document.createElement("strong");
+      native.textContent = item.native;
+      const label = document.createElement("small");
+      label.textContent = item.label;
+      copy.append(native, label);
+      const check = document.createElement("span");
+      check.className = "language-option-check";
+      check.textContent = "✓";
+      button.append(flag, copy, check);
+      button.addEventListener("click", () => {
+        setLanguage(item.code);
+        updateCurrentLanguageLabel();
+        closeLanguageModal();
+        refreshLocalizedUI();
+      });
+      return button;
+    })
+  );
+}
+
+function refreshLocalizedUI() {
+  setTheme(document.documentElement.dataset.theme === "light" ? "light" : "dark");
+  renderPoolStates();
+  syncSelectedPoolUI();
+  updateAmountFeedback();
+  renderWallet();
+  renderWalletHistory();
+  renderMyCollection();
+  renderGifts();
+  renderSavedRoundActivity();
+  if (activeGift) {
+    updateGiftDetailFavorite();
+    updateGiftDetailAddButton();
+  }
+  if (walletModal.classList.contains("is-open")) setWalletMode(walletMode);
+  if (roundModal.classList.contains("is-open")) {
+    const level = Number(roundModal.dataset.roundLevel);
+    const round = poolRounds[level];
+    if (round?.completed) showRoundResult(level);
+    else renderRoundExperience();
+  }
+}
+
+function openLanguageModal() {
+  renderLanguageOptions();
+  languageModal.classList.add("is-open");
+  languageModal.setAttribute("aria-hidden", "false");
+  languageOptions?.querySelector(".language-option.is-active")?.focus();
+}
+
+function closeLanguageModal() {
+  languageModal.classList.remove("is-open");
+  languageModal.setAttribute("aria-hidden", "true");
+}
+
+document.querySelectorAll("[data-language-open]").forEach((trigger) => {
+  trigger.addEventListener("click", openLanguageModal);
+});
+document.querySelectorAll("[data-language-close]").forEach((button) => {
+  button.addEventListener("click", closeLanguageModal);
+});
+languageModal.addEventListener("click", (event) => {
+  if (event.target === languageModal) closeLanguageModal();
+});
+updateCurrentLanguageLabel();
 
 giftSearch.addEventListener("input", () => {
   giftPageState.query = giftSearch.value;
@@ -598,8 +1177,7 @@ function parseGramInput(value) {
 }
 
 function saveWallet() {
-  localStorage.setItem("gram-demo-balance", String(wallet.balance));
-  localStorage.setItem("gram-demo-wallet-history", JSON.stringify(wallet.history.slice(0, 20)));
+  return undefined;
 }
 
 function getReservedBalance() {
@@ -608,8 +1186,102 @@ function getReservedBalance() {
   }, 0);
 }
 
+/* ============ 充值地址与二维码 ============ */
+let depositAddresses = [];
+let selectedDepositAddressId = null;
+
+function depositQrUrl(address) {
+  return `https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=0&data=${encodeURIComponent(address)}`;
+}
+
+function renderDepositAddresses() {
+  const list = document.querySelector("[data-deposit-address-list]");
+  const empty = document.querySelector("[data-deposit-empty]");
+  const counter = document.querySelector("[data-deposit-count]");
+  if (!list || !empty) return;
+  if (counter) counter.textContent = `${depositAddresses.length} 个可用地址`;
+  empty.hidden = depositAddresses.length > 0;
+  list.replaceChildren(...depositAddresses.map((entry) => {
+    const card = document.createElement("div");
+    card.className = "deposit-address-card";
+    card.dataset.depositAddressId = entry.id;
+    if (entry.id === selectedDepositAddressId) card.classList.add("is-selected");
+
+    const radio = document.createElement("button");
+    radio.type = "button";
+    radio.className = "deposit-address-pick";
+    radio.dataset.depositPick = entry.id;
+    radio.setAttribute("aria-pressed", String(entry.id === selectedDepositAddressId));
+
+    const qr = document.createElement("img");
+    qr.className = "deposit-qr";
+    qr.alt = `${entry.label} ${t("w.qrTitle")}`;
+    qr.width = 180;
+    qr.height = 180;
+    qr.loading = "lazy";
+    qr.decoding = "async";
+    qr.src = depositQrUrl(entry.address);
+    qr.addEventListener("error", () => {
+      qr.hidden = true;
+      const fallback = document.createElement("div");
+      fallback.className = "deposit-qr-fallback";
+      fallback.textContent = t("w.qrFallback");
+      qr.replaceWith(fallback);
+    });
+
+    const body = document.createElement("div");
+    body.className = "deposit-address-body";
+    const label = document.createElement("strong");
+    label.textContent = entry.label;
+    const value = document.createElement("code");
+    value.textContent = entry.address;
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "invitation-chip-copy";
+    copy.dataset.depositCopy = entry.address;
+    copy.dataset.i18nAria = "w.copyAddress";
+    copy.setAttribute("aria-label", t("w.copyAddress"));
+    copy.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11.5" height="11.5" rx="2.5" /><path d="M5.5 15H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v.5" /></svg>`;
+    if (entry.note) {
+      const note = document.createElement("small");
+      note.textContent = entry.note;
+      body.append(label, value, note, copy);
+    } else {
+      body.append(label, value, copy);
+    }
+    card.append(qr, body);
+    radio.append(card);
+    return radio;
+  }));
+}
+
+document.addEventListener("click", (event) => {
+  const pick = event.target.closest("[data-deposit-pick]");
+  if (pick) {
+    selectedDepositAddressId = Number(pick.dataset.depositPick);
+    document.querySelectorAll("[data-deposit-address-id]").forEach((card) => {
+      card.classList.remove("is-selected");
+    });
+    renderDepositAddresses();
+    return;
+  }
+  const copy = event.target.closest("[data-deposit-copy]");
+  if (copy) {
+    event.stopPropagation();
+    const address = copy.dataset.depositCopy;
+    navigator.clipboard?.writeText(address).then(() => {
+      showToast(t("w.addressCopied", { address }));
+    }).catch(() => {
+      showToast(address);
+    });
+  }
+});
+
 function renderWallet() {
-  const totalBalance = wallet.balance + getReservedBalance();
+  const pendingWithdrawalUnits = wallet.requests
+    .filter((request) => request.kind === "withdraw" && request.status === "pending")
+    .reduce((sum, request) => sum + request.amountUnits, 0);
+  const totalBalance = wallet.balance + getReservedBalance() + pendingWithdrawalUnits;
   const formatted = formatGram(totalBalance);
   const available = `${formatGram(wallet.balance)} GRAM`;
   document.querySelectorAll("[data-wallet-balance]").forEach((element) => {
@@ -627,9 +1299,13 @@ function renderWallet() {
     document.querySelectorAll(".balance-value").forEach((element) => {
       element.textContent = "••••";
     });
+    document.querySelectorAll(".market-price").forEach((element) => {
+      element.textContent = "••••••";
+    });
   }
   amountInput.max = String(wallet.balance / 100);
   document.querySelector("[data-fill='max']").disabled = wallet.balance <= 0;
+  renderDepositAddresses();
   renderWalletHistory();
   renderMyCollection();
   syncSelectedPoolUI();
@@ -640,10 +1316,10 @@ function renderWallet() {
 function renderWalletHistory() {
   const historyList = document.querySelector("[data-wallet-history]");
   if (!historyList) return;
-  if (wallet.history.length === 0) {
+  if (wallet.history.length === 0 && wallet.requests.length === 0) {
     const empty = document.createElement("p");
     empty.className = "wallet-history-empty";
-    empty.textContent = "暂无充值或转出演示记录";
+    empty.textContent = t("wh.empty");
     historyList.replaceChildren(empty);
     return;
   }
@@ -653,28 +1329,55 @@ function renderWalletHistory() {
     row.className = "wallet-history-item";
     const icon = document.createElement("span");
     icon.className = `wallet-history-icon ${entry.kind}`;
-    icon.textContent = entry.kind === "deposit" || entry.kind === "mint-win" || entry.kind === "collectible-reward" ? "↑" : "↓";
+    icon.textContent = ["deposit", "mint-win", "collectible-reward", "admin-credit", "withdraw-release"].includes(entry.kind) ? "↑" : "↓";
     const details = document.createElement("span");
     details.className = "wallet-history-copy";
     const title = document.createElement("strong");
-    title.textContent = {
-      deposit: "模拟充值",
-      withdraw: "模拟转出",
-      "mint-win": "铸造盈利",
-      "mint-loss": "铸造亏损",
-      "collectible-reward": "典藏演示收益",
-    }[entry.kind] || "账户记录";
+    const walletLabels = {
+      deposit: "wh.deposit",
+      withdraw: "wh.withdraw",
+      "mint-win": "wh.mintWin",
+      "mint-loss": "wh.mintLoss",
+      "collectible-reward": "wh.reward",
+      "admin-credit": "wh.adminCredit",
+      "admin-debit": "wh.adminDebit",
+      "withdraw-release": "wh.withdrawRelease",
+    };
+    title.textContent = walletLabels[entry.kind] ? t(walletLabels[entry.kind]) : t("wh.default");
     const time = document.createElement("small");
-    time.textContent = `${new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(entry.createdAt))} · 本地演示`;
+    time.textContent = `${new Intl.DateTimeFormat(getLocale(), { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(entry.createdAt))} · ${t("wh.serverRecord")}`;
     details.append(title, time);
     const amount = document.createElement("strong");
     amount.className = `wallet-history-amount ${entry.kind}`;
-    const isCredit = entry.kind === "deposit" || entry.kind === "mint-win" || entry.kind === "collectible-reward";
+    const isCredit = ["deposit", "mint-win", "collectible-reward", "admin-credit", "withdraw-release"].includes(entry.kind);
     amount.textContent = `${isCredit ? "+" : "−"}${formatGram(entry.amount)} G`;
     row.append(icon, details, amount);
     return row;
   });
-  historyList.replaceChildren(...entries);
+  const requestEntries = wallet.requests.slice(0, 6).map((request) => {
+    const row = document.createElement("div");
+    row.className = "wallet-history-item";
+    const icon = document.createElement("span");
+    icon.className = `wallet-history-icon ${request.kind}`;
+    icon.textContent = request.status === "approved" ? "✓" : request.status === "cancelled" ? "×" : "…";
+    const details = document.createElement("span");
+    details.className = "wallet-history-copy";
+    const title = document.createElement("strong");
+    title.textContent = `${request.kind === "deposit" ? t("wh.depositRequest") : t("wh.withdrawRequest")} · ${
+      request.status === "pending" ? t("wh.pendingReview") : request.status === "approved" ? t("wh.approved") : t("wh.cancelled")
+    }`;
+    const time = document.createElement("small");
+    time.textContent = `${new Intl.DateTimeFormat(getLocale(), { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(request.createdAt))} · ${
+      request.kind === "withdraw" && request.status === "pending" ? t("wh.frozen") : t("wh.reviewProcess")
+    }`;
+    details.append(title, time);
+    const amount = document.createElement("strong");
+    amount.className = "wallet-history-amount";
+    amount.textContent = `${request.kind === "deposit" ? "+" : "−"}${formatGram(request.amountUnits)} G`;
+    row.append(icon, details, amount);
+    return row;
+  });
+  historyList.replaceChildren(...requestEntries, ...entries);
 }
 
 function addWalletHistory(kind, amount) {
@@ -686,7 +1389,7 @@ function addWalletHistory(kind, amount) {
 
 function setWalletMode(mode) {
   walletMode = mode;
-  document.querySelector("[data-wallet-title]").textContent = mode === "deposit" ? "账户充值" : "账户转出";
+  document.querySelector("[data-wallet-title]").textContent = mode === "deposit" ? t("w.deposit") : t("w.withdraw");
   document.querySelector("[data-wallet-deposit-panel]").hidden = mode !== "deposit";
   document.querySelector("[data-wallet-withdraw-panel]").hidden = mode !== "withdraw";
   document.querySelector("[data-wallet-confirm-panel]").hidden = true;
@@ -720,11 +1423,11 @@ function showWalletFeedback(selector, message) {
 
 function canEnterPool(level) {
   const rule = poolRules[level];
-  return Boolean(rule && wallet.balance + getReservedBalance() >= Math.round(rule.balance * 100));
+  return Boolean(rule && rule.enabled !== false && wallet.balance + getReservedBalance() >= Math.round(rule.balance * 100));
 }
 
 function getProfitRate(level) {
-  return 20 + level * 10;
+  return poolRules[level]?.profitPercent ?? 20 + level * 10;
 }
 
 function syncSelectedPoolUI() {
@@ -735,16 +1438,18 @@ function syncSelectedPoolUI() {
     card.classList.toggle("is-selected", active);
     card.setAttribute("aria-pressed", String(active));
   });
-  levelLabel.textContent = `LV.${String(selected.level).padStart(2, "0")} ${rule.name}`;
+  levelLabel.textContent = `LV.${String(selected.level).padStart(2, "0")} ${poolName(rule)}`;
   document.querySelector("[data-selected-level-index]").textContent =
     `${String(selected.level).padStart(2, "0")} / 08`;
   document.querySelector("[data-minimum-stake]").textContent =
-    `最低铸造 ${rule.minimum.toLocaleString("en-US")} GRAM`;
+    t("pool.minStakeHint", { amount: rule.minimum.toLocaleString("en-US") });
+  document.querySelector("[data-selected-win-chance]").textContent =
+    `${((rule.winProbabilityBp || 0) / 100).toFixed(2).replace(/\.?0+$/, "")}%`;
   amountInput.min = String(rule.minimum);
 }
 
 function savePoolRounds() {
-  localStorage.setItem("gram-demo-pool-rounds", JSON.stringify(poolRounds));
+  return undefined;
 }
 
 function roundSecondsRemaining(level) {
@@ -773,13 +1478,13 @@ function renderPoolStates() {
     card.classList.toggle("is-selected", level === selected.level);
     card.setAttribute("aria-pressed", String(level === selected.level));
     card.querySelector("[data-pool-status]").textContent =
-      active ? "倒计时中" : !eligible ? "资金不足" : round.completed
-        ? round.won ? "本轮盈利" : "本轮亏损"
-        : "已解锁";
+      active ? t("pool.running") : !eligible ? t("pool.locked") : round.completed
+        ? round.won ? t("pool.roundWin") : t("pool.roundLoss")
+        : t("pool.unlocked");
     card.querySelector("[data-pool-requirement]").textContent =
-      `账户需 ≥ ${rule.balance.toLocaleString("en-US")} GRAM`;
+      t("pool.requirement", { amount: rule.balance.toLocaleString("en-US") });
     card.querySelector("[data-pool-stake]").textContent = rule.minimum.toLocaleString("en-US");
-    card.querySelector("[data-pool-stake-label]").textContent = "GRAM 起投";
+    card.querySelector("[data-pool-stake-label]").textContent = t("pool.minStake");
     card.querySelector("[data-pool-timer]").textContent =
       formatCountdown(active ? remaining : rule.duration);
     card.querySelector("[data-pool-profit]").textContent = `+${getProfitRate(level)}%`;
@@ -793,14 +1498,16 @@ function renderPoolStates() {
   document.querySelector("[data-session-timer]").textContent =
     formatCountdown(active ? remaining : selectedRule.duration);
   document.querySelector("[data-session-state]").textContent =
-    active ? "倒计时中" : !eligible ? "需达到账户门槛" : selectedRound.completed
-      ? selectedRound.won ? "本轮盈利" : "本轮亏损"
-      : "下注后开始";
+    active ? t("pool.running") : !eligible ? t("pool.needTier") : selectedRound.completed
+      ? selectedRound.won ? t("pool.roundWin") : t("pool.roundLoss")
+      : t("pool.sessionState");
   document.querySelector("[data-selected-profit]").textContent = `+${getProfitRate(selected.level)}%`;
+  document.querySelector("[data-round-probability]").textContent =
+    `${((selectedRound.winProbabilityBp || selectedRule.winProbabilityBp || 0) / 100).toFixed(2).replace(/\.?0+$/, "")}%`;
 
   const startButton = document.querySelector("[data-start-mint]");
   startButton.disabled = !eligible || active;
-  startButton.firstChild.textContent = active ? "本池倒计时中 " : "开启演示铸造 ";
+  startButton.firstChild.textContent = active ? t("pool.running") + " " : t("pool.start") + " ";
 }
 
 renderWallet();
@@ -811,11 +1518,11 @@ function updateAmountFeedback() {
   let message = "";
 
   if (!canEnterPool(selected.level)) {
-    message = `账户总额需达到 ${rule.balance} GRAM 才能解锁此池`;
+    message = t("dyn.needTierUnlock", { amount: rule.balance.toLocaleString("en-US") });
   } else if (!Number.isFinite(value) || value < rule.minimum) {
-    message = `至少输入 ${rule.minimum.toLocaleString("en-US")} GRAM`;
+    message = t("dyn.minStakeInput", { amount: rule.minimum.toLocaleString("en-US") });
   } else if (Math.round(value * 100) > wallet.balance) {
-    message = "超过演示可用余额";
+    message = t("dyn.overBalance");
   }
 
   amountFeedback.textContent = message;
@@ -840,9 +1547,9 @@ function renderRoundActivity(level) {
   const details = document.createElement("div");
   details.className = "activity-copy";
   const title = document.createElement("strong");
-  title.textContent = `${poolRules[level].name} · 方式 ${String(round.method).padStart(2, "0")}`;
+  title.textContent = `${poolName(poolRules[level])} · ${t("pool.methodShort")} ${String(round.method).padStart(2, "0")}`;
   const timestamp = document.createElement("span");
-  timestamp.textContent = `${new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit" }).format(new Date(round.startedAt))} · 演示记录`;
+  timestamp.textContent = `${new Intl.DateTimeFormat(getLocale(), { hour: "2-digit", minute: "2-digit" }).format(new Date(round.startedAt))} · ${t("pool.done")}`;
   details.append(title, timestamp);
 
   const result = document.createElement("div");
@@ -851,13 +1558,13 @@ function renderRoundActivity(level) {
   const resultText = document.createElement("span");
   if (!round.settled) {
     amount.textContent = `${formatGram(round.betAmount)} G`;
-    resultText.textContent = "倒计时中 · 已暂扣";
+    resultText.textContent = t("round.counting");
   } else if (round.won) {
     amount.textContent = `+${formatGram(round.profitAmount)} G`;
-    resultText.textContent = `盈利 · +${getProfitRate(level)}%`;
+    resultText.textContent = t("round.profitLine", { rate: round.profitPercent });
   } else {
     amount.textContent = `−${formatGram(round.betAmount)} G`;
-    resultText.textContent = "亏损 · 本金全损";
+    resultText.textContent = t("round.lossLine");
   }
   result.append(amount, resultText);
   row.append(token, details, result);
@@ -903,17 +1610,29 @@ function showRoundResult(level) {
   resultPanel.hidden = false;
   document.querySelector("[data-round-result-mark]").textContent = won ? "✦" : "×";
   document.querySelector("[data-round-result-mark]").classList.toggle("is-loss", !won);
-  document.querySelector("[data-round-result-heading]").textContent = won ? "恭喜盈利" : "本次亏损";
+  document.querySelector("[data-round-result-heading]").textContent = won ? t("round.resultWin") : t("round.resultLoss");
   document.querySelector("[data-round-result-copy]").textContent = won
-    ? `本金已返还，额外盈利 ${formatGram(round.profitAmount)} GRAM。`
-    : `本轮未中奖，下注本金 ${formatGram(round.betAmount)} GRAM 已全额损失。`;
+    ? t("round.winDesc", { amount: formatGram(round.profitAmount) })
+    : t("round.lossDesc", { amount: formatGram(round.betAmount) });
   document.querySelector("[data-round-final-amount]").textContent =
     `${won ? "+" : "−"}${formatGram(won ? round.profitAmount : round.betAmount)} GRAM`;
   document.querySelector("[data-round-final-amount]").classList.toggle("is-loss", !won);
   document.querySelector("[data-round-result-stake]").textContent = `${formatGram(round.betAmount)} GRAM`;
-  document.querySelector("[data-round-result-rate]").textContent = `+${getProfitRate(level)}%`;
+  document.querySelector("[data-round-result-rate]").textContent = `+${round.profitPercent}%`;
   document.querySelector("[data-round-result-balance]").textContent =
     `${formatGram(wallet.balance + getReservedBalance())} GRAM`;
+  const proof = round.fairnessSecret
+    ? t("round.fairnessProof", {
+        commitment: round.fairnessCommitment,
+        secret: round.fairnessSecret,
+        nonce: round.fairnessNonce,
+        draw: round.fairnessDraw,
+        threshold: round.winProbabilityBp,
+      })
+    : t("round.noProof");
+  document.querySelector("[data-round-fairness-proof]").textContent = proof;
+  document.querySelector("[data-round-probability]").textContent =
+    `${((round.winProbabilityBp || 0) / 100).toFixed(2).replace(/\.?0+$/, "")}%`;
   roundModal.classList.add("is-open");
   roundModal.setAttribute("aria-hidden", "false");
   document.querySelector("[data-round-result-close]").focus();
@@ -921,27 +1640,24 @@ function showRoundResult(level) {
 
 function settleRound(level) {
   const round = poolRounds[level];
-  if (!round || round.settled) return;
-
-  round.endsAt = 0;
-  round.completed = true;
-  round.settled = true;
-  if (round.won) wallet.balance += round.betAmount + round.profitAmount;
-  wallet.history.unshift({
-    kind: round.won ? "mint-win" : "mint-loss",
-    amount: round.won ? round.profitAmount : round.betAmount,
-    createdAt: new Date().toISOString(),
-  });
-  wallet.history = wallet.history.slice(0, 20);
-  savePoolRounds();
-  saveWallet();
-
-  renderRoundActivity(level);
-  renderWallet();
-  showRoundResult(level);
-  showToast(round.won
-    ? `本轮盈利 +${formatGram(round.profitAmount)} GRAM`
-    : `本轮亏损 −${formatGram(round.betAmount)} GRAM`);
+  if (!round || round.settled || apiPendingRounds.has(level)) return;
+  apiPendingRounds.add(level);
+  refreshServerState()
+    .then(() => {
+      const refreshedRound = poolRounds[level];
+      if (refreshedRound.settled && refreshedRound.completed) {
+        renderRoundActivity(level);
+        showRoundResult(level);
+        showToast(refreshedRound.won
+          ? t("dyn.roundWonToast", { amount: formatGram(refreshedRound.profitAmount) })
+          : t("dyn.roundLostToast", { amount: formatGram(refreshedRound.betAmount) }));
+      }
+      apiPendingRounds.delete(level);
+    })
+    .catch((error) => {
+      showToast(t("dyn.serverSyncFailed", { message: error.message }));
+      setTimeout(() => apiPendingRounds.delete(level), 3000);
+    });
 }
 
 function renderRoundExperience() {
@@ -954,18 +1670,20 @@ function renderRoundExperience() {
   const remaining = roundSecondsRemaining(activeLevel);
   const progress = Math.min(1, Math.max(0, 1 - remaining / rule.duration));
   document.querySelector("[data-round-pool-name]").textContent =
-    `LV.${String(activeLevel).padStart(2, "0")} ${rule.name}`;
+    `LV.${String(activeLevel).padStart(2, "0")} ${poolName(rule)}`;
   document.querySelector("[data-round-countdown]").textContent = formatCountdown(remaining);
   document.querySelector("[data-round-progress]").style.transform = `scaleX(${progress})`;
   document.querySelector("[data-round-stake]").textContent = `${formatGram(round.betAmount)} GRAM`;
-  document.querySelector("[data-round-rate]").textContent = `+${getProfitRate(activeLevel)}%`;
+  document.querySelector("[data-round-rate]").textContent = `+${round.profitPercent}%`;
 
   const showProfit = Math.random() < 0.5;
-  const changingAmount = showProfit ? round.profitAmount : round.betAmount;
+  const changingAmount = showProfit ? Math.round(round.betAmount * round.profitPercent / 100) : round.betAmount;
+  document.querySelector("[data-round-probability]").textContent =
+    `${((round.winProbabilityBp || 0) / 100).toFixed(2).replace(/\.?0+$/, "")}%`;
   const flashCard = document.querySelector("[data-round-flash-card]");
   flashCard.classList.toggle("is-loss", !showProfit);
   document.querySelector("[data-round-flash-label]").textContent =
-    showProfit ? "模拟盈利波动" : "模拟亏损波动";
+    showProfit ? t("dyn.settleWin") : t("dyn.settleLoss");
   document.querySelector("[data-round-flash-amount]").textContent =
     `${showProfit ? "+" : "−"}${formatGram(changingAmount)} GRAM`;
 }
@@ -1008,7 +1726,7 @@ function openModal() {
 
   modal.querySelector("[data-modal-amount]").textContent =
     `${Number(amountInput.value).toLocaleString("en-US")} GRAM`;
-  modal.querySelector("[data-modal-method]").textContent = `方式 ${String(selected.method).padStart(2, "0")}`;
+  modal.querySelector("[data-modal-method]").textContent = `${t("pool.methodShort")} ${String(selected.method).padStart(2, "0")}`;
   const betAmount = parseGramInput(amountInput.value);
   const rate = getProfitRate(selected.level);
   modal.querySelector("[data-modal-profit]").textContent =
@@ -1040,11 +1758,11 @@ document.querySelector("[data-fill='max']").addEventListener("click", () => {
 
 document.querySelector("[data-start-mint]").addEventListener("click", openModal);
 document.querySelectorAll("[data-modal-close]").forEach((button) => button.addEventListener("click", closeModal));
-document.querySelector("[data-modal-confirm]").addEventListener("click", () => {
+document.querySelector("[data-modal-confirm]").addEventListener("click", async () => {
   if (!canEnterPool(selected.level) || roundSecondsRemaining(selected.level) > 0) {
     closeModal();
     renderPoolStates();
-    showToast("当前账户余额或本池状态已变化，请重新确认");
+    showToast(t("dyn.stateChanged"));
     return;
   }
 
@@ -1052,41 +1770,43 @@ document.querySelector("[data-modal-confirm]").addEventListener("click", () => {
   if (amount === null || amount > wallet.balance) {
     closeModal();
     updateAmountFeedback();
-    showToast("可用余额不足或下注金额无效，请重新确认");
+    showToast(t("dyn.insufficient"));
     return;
   }
 
   const level = selected.level;
-  const rule = poolRules[level];
-  const rate = getProfitRate(level);
-  const startedAt = Date.now();
-  const profitAmount = Math.round(amount * rate / 100);
-  wallet.balance -= amount;
-  poolRounds[level] = {
-    endsAt: startedAt + rule.duration * 1000,
-    completed: false,
-    settled: false,
-    betAmount: amount,
-    profitAmount,
-    won: Math.random() < 0.5,
-    method: selected.method,
-    startedAt,
-  };
-  saveWallet();
-  savePoolRounds();
-  closeModal();
-  renderWallet();
-  renderRoundActivity(level);
-  openRoundExperience(level);
+  const button = document.querySelector("[data-modal-confirm]");
+  button.disabled = true;
+  try {
+    await apiRequest("/api/rounds", {
+      method: "POST",
+      body: { level, method: selected.method, amountUnits: amount },
+    });
+    await refreshServerState();
+    closeModal();
+    renderRoundActivity(level);
+    openRoundExperience(level);
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    button.disabled = false;
+  }
 });
 
-document.querySelector(".eye-button").addEventListener("click", (event) => {
+function maskBalance(isHidden) {
+  document.querySelectorAll(".balance-value").forEach((element) => {
+    element.textContent = isHidden ? "••••" : element.dataset.balance || element.textContent;
+  });
+  document.querySelectorAll(".market-price").forEach((element) => {
+    element.textContent = isHidden ? "••••••" : element.dataset.price || element.textContent;
+  });
+}
+
+document.querySelector(".eye-button")?.addEventListener("click", (event) => {
   const button = event.currentTarget;
   const hidden = button.getAttribute("aria-pressed") !== "true";
   button.setAttribute("aria-pressed", String(hidden));
-  document.querySelectorAll(".balance-value").forEach((element) => {
-    element.textContent = hidden ? "••••" : element.dataset.balance;
-  });
+  maskBalance(hidden);
 });
 
 document.querySelectorAll("[data-wallet-open]").forEach((button) => {
@@ -1105,22 +1825,30 @@ walletModal.addEventListener("click", (event) => {
   if (event.target === walletModal) closeWallet();
 });
 
-document.querySelector("[data-deposit-submit]").addEventListener("click", () => {
+document.querySelector("[data-deposit-submit]").addEventListener("click", async () => {
   const amount = parseGramInput(document.querySelector("#deposit-amount").value);
   if (amount === null) {
-    showWalletFeedback("[data-deposit-feedback]", "请输入大于 0 的充值金额。");
+    showWalletFeedback("[data-deposit-feedback]", t("dyn.depositAmountPositive"));
     return;
   }
-  if (!Number.isSafeInteger(wallet.balance + amount)) {
-    showWalletFeedback("[data-deposit-feedback]", "金额超出演示账户可记录范围。");
+  const chosen = depositAddresses.find((entry) => entry.id === selectedDepositAddressId);
+  if (!chosen) {
+    showWalletFeedback("[data-deposit-feedback]", t("dyn.depositNeedAddress"));
     return;
   }
-  wallet.balance += amount;
-  addWalletHistory("deposit", amount);
-  document.querySelector("#deposit-amount").value = "";
-  showWalletFeedback("[data-deposit-feedback]", "");
-  closeWallet();
-  showToast(`模拟充值成功：+${formatGram(amount)} GRAM`);
+  try {
+    const result = await apiRequest("/api/wallet/deposit", {
+      method: "POST",
+      body: { amountUnits: amount, address: `${chosen.label}｜${chosen.address}` },
+    });
+    applyServerState(result.state);
+    document.querySelector("#deposit-amount").value = "";
+    showWalletFeedback("[data-deposit-feedback]", "");
+    closeWallet();
+    showToast(t("dyn.depositSubmitted", { amount: formatGram(amount) }));
+  } catch (error) {
+    showWalletFeedback("[data-deposit-feedback]", error.message);
+  }
 });
 
 document.querySelector("[data-withdraw-max]").addEventListener("click", () => {
@@ -1132,17 +1860,17 @@ document.querySelector("[data-withdraw-submit]").addEventListener("click", () =>
   const address = document.querySelector("#withdraw-address").value.trim();
   const amount = parseGramInput(document.querySelector("#withdraw-amount").value);
   if (address.length < 8) {
-    showWalletFeedback("[data-withdraw-feedback]", "请填写至少 8 个字符的演示收款地址。");
+    showWalletFeedback("[data-withdraw-feedback]", t("dyn.addressShort"));
     document.querySelector("#withdraw-address").focus();
     return;
   }
   if (amount === null) {
-    showWalletFeedback("[data-withdraw-feedback]", "请输入大于 0 的转出金额。");
+    showWalletFeedback("[data-withdraw-feedback]", t("dyn.withdrawAmountPositive"));
     document.querySelector("#withdraw-amount").focus();
     return;
   }
   if (amount > wallet.balance) {
-    showWalletFeedback("[data-withdraw-feedback]", "转出金额超过当前可用演示余额。");
+    showWalletFeedback("[data-withdraw-feedback]", t("dyn.withdrawOver"));
     return;
   }
 
@@ -1160,27 +1888,32 @@ document.querySelector("[data-wallet-back]").addEventListener("click", () => {
   document.querySelector("[data-withdraw-submit]").focus();
 });
 
-document.querySelector("[data-withdraw-confirm]").addEventListener("click", () => {
+document.querySelector("[data-withdraw-confirm]").addEventListener("click", async () => {
   const amount = parseGramInput(document.querySelector("#withdraw-amount").value);
   if (amount === null || amount > wallet.balance) {
-    showWalletFeedback("[data-withdraw-feedback]", "余额已变化，请检查金额后重试。");
+    showWalletFeedback("[data-withdraw-feedback]", t("dyn.balanceChanged"));
     setWalletMode("withdraw");
     return;
   }
-  wallet.balance -= amount;
-  addWalletHistory("withdraw", amount);
-  document.querySelector("#withdraw-address").value = "";
-  document.querySelector("#withdraw-amount").value = "";
-  closeWallet();
-  showToast(`模拟转出已记录：−${formatGram(amount)} GRAM`);
+  try {
+    const address = document.querySelector("#withdraw-address").value.trim();
+    const result = await apiRequest("/api/wallet/withdraw", { method: "POST", body: { amountUnits: amount, address } });
+    applyServerState(result.state);
+    document.querySelector("#withdraw-address").value = "";
+    document.querySelector("#withdraw-amount").value = "";
+    closeWallet();
+    showToast(t("dyn.withdrawSubmitted", { amount: formatGram(amount) }));
+  } catch (error) {
+    showWalletFeedback("[data-withdraw-feedback]", error.message);
+  }
 });
 
 document.querySelectorAll("[data-toast]").forEach((button) => {
-  button.addEventListener("click", () => showToast(button.dataset.toast));
+  button.addEventListener("click", () => showToast(t(button.dataset.toast)));
 });
 
-document.querySelector('[aria-label="打开通知"]').addEventListener("click", () => {
-  showToast("暂无新通知");
+document.querySelector("[data-notifications-button]").addEventListener("click", () => {
+  showToast(t("dyn.noNotifications"));
 });
 
 modal.addEventListener("click", (event) => {
@@ -1192,6 +1925,7 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && walletModal.classList.contains("is-open")) closeWallet();
   if (event.key === "Escape" && roundModal.classList.contains("is-open")) closeRoundExperience();
   if (event.key === "Escape" && giftDetail.classList.contains("is-open")) closeGiftDetail();
+  if (event.key === "Escape" && languageModal.classList.contains("is-open")) closeLanguageModal();
 });
 
 document.querySelectorAll("[data-round-minimize]").forEach((button) => {
@@ -1199,63 +1933,26 @@ document.querySelectorAll("[data-round-minimize]").forEach((button) => {
 });
 document.querySelector("[data-round-result-close]").addEventListener("click", closeRoundExperience);
 
-const AUTH_ACCOUNTS_KEY = "gram-demo-auth-accounts";
-const AUTH_SESSION_KEY = "gram-demo-auth-session";
-const AUTH_PASSWORD_ITERATIONS = 120000;
 const authScreen = document.querySelector("[data-auth-screen]");
 const platform = document.querySelector("[data-platform]");
 const authUserLabel = document.querySelector("[data-auth-user]");
-let authenticatedUsername = "";
 
 function showAuthFeedback(formName, message = "") {
   document.querySelector(`[data-auth-feedback="${formName}"]`).textContent = message;
 }
 
-function readDemoAccounts() {
-  const storedAccounts = localStorage.getItem(AUTH_ACCOUNTS_KEY);
-  if (storedAccounts === null) return [];
-  const accounts = JSON.parse(storedAccounts);
-  if (!Array.isArray(accounts) || accounts.some((account) =>
-    !account || typeof account.username !== "string" ||
-    typeof account.salt !== "string" || typeof account.verifier !== "string" ||
-    !Number.isSafeInteger(account.iterations)))
-    throw new Error("本地演示账户数据格式无效。");
-  return accounts;
-}
-
-function normalizeUsername(value) {
-  return value.trim().toLowerCase();
-}
-
-function isValidUsername(value) {
-  return /^[a-zA-Z0-9._-]{3,24}$/.test(value);
-}
-
-function toHex(bytes) {
-  return Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-async function derivePasswordVerifier(password, salt, iterations = AUTH_PASSWORD_ITERATIONS) {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(password),
-    "PBKDF2",
-    false,
-    ["deriveBits"],
-  );
-  return toHex(await crypto.subtle.deriveBits({
-    name: "PBKDF2",
-    hash: "SHA-256",
-    salt: Uint8Array.from(salt.match(/.{2}/g) || [], (byte) => Number.parseInt(byte, 16)),
-    iterations,
-  }, key, 256));
-}
-
-function enterPlatform(username) {
-  authenticatedUsername = username;
-  authUserLabel.textContent = username;
+async function enterPlatform(user) {
+  const state = await refreshServerState();
+  authenticatedUsername = user.username;
+  authUserLabel.textContent = user.displayName || user.username;
   authScreen.hidden = true;
   platform.hidden = false;
+  const activeLevel = Object.entries(poolRounds)
+    .filter(([, round]) => round.endsAt > Date.now() && !round.settled)
+    .map(([level]) => Number(level))
+    .sort((first, second) => poolRounds[second].endsAt - poolRounds[first].endsAt)[0];
+  if (activeLevel) openRoundExperience(activeLevel);
+  return state;
 }
 
 function setAuthTab(tabName) {
@@ -1267,7 +1964,7 @@ function setAuthTab(tabName) {
   document.querySelectorAll("[data-auth-form]").forEach((form) => {
     form.hidden = form.dataset.authForm !== tabName;
   });
-  document.querySelector("#auth-heading").textContent = tabName === "login" ? "欢迎回来" : "创建演示账户";
+  document.querySelector("#auth-heading").textContent = tabName === "login" ? t("auth.headingLogin") : t("auth.createHeading");
   showAuthFeedback("login");
   showAuthFeedback("register");
 }
@@ -1280,42 +1977,40 @@ document.querySelector('[data-auth-form="register"]').addEventListener("submit",
   event.preventDefault();
   const form = event.currentTarget;
   const username = form.elements.username.value.trim();
-  const normalizedUsername = normalizeUsername(username);
+  const invitationCode = form.elements.invitationCode ? form.elements.invitationCode.value.trim().toUpperCase() : "";
   const password = form.elements.password.value;
   const passwordConfirm = form.elements.passwordConfirm.value;
   const submitButton = form.querySelector('[type="submit"]');
 
   showAuthFeedback("register");
-  if (!isValidUsername(username)) {
-    showAuthFeedback("register", "用户名需为 3–24 位字母、数字或 . _ -。");
+  if (!/^[a-zA-Z0-9._-]{3,24}$/.test(username)) {
+    showAuthFeedback("register", t("auth.errUsernameFormat"));
     return;
   }
   if (password.length < 8) {
-    showAuthFeedback("register", "密码至少需要 8 位。");
+    showAuthFeedback("register", t("auth.errPasswordShort"));
     return;
   }
   if (password !== passwordConfirm) {
-    showAuthFeedback("register", "两次输入的密码不一致。");
+    showAuthFeedback("register", t("auth.errPasswordMismatch"));
+    return;
+  }
+  if (invitationCode && !/^[A-Z0-9]{5}$/.test(invitationCode)) {
+    showAuthFeedback("register", t("auth.errInvitationFormat"));
+    return;
+  }
+  if (!invitationCode) {
+    showAuthFeedback("register", t("auth.errInvitationRequired"));
     return;
   }
 
   submitButton.disabled = true;
   try {
-    const accounts = readDemoAccounts();
-    if (accounts.some((account) => account.username === normalizedUsername)) {
-      showAuthFeedback("register", "这个用户名已注册，请直接登录。");
-      return;
-    }
-    const salt = toHex(crypto.getRandomValues(new Uint8Array(16)));
-    const verifier = await derivePasswordVerifier(password, salt);
-    accounts.push({ username: normalizedUsername, displayName: username, salt, verifier, iterations: AUTH_PASSWORD_ITERATIONS });
-    localStorage.setItem(AUTH_ACCOUNTS_KEY, JSON.stringify(accounts));
-    localStorage.setItem(AUTH_SESSION_KEY, normalizedUsername);
+    const result = await apiRequest("/api/register", { method: "POST", body: { username, password, invitationCode } });
     form.reset();
-    enterPlatform(username);
+    await enterPlatform(result.user);
   } catch (error) {
-    console.error("演示账户注册失败。", error);
-    showAuthFeedback("register", "无法创建本地账户，请检查浏览器存储和 Web Crypto 支持。");
+    showAuthFeedback("register", error.message);
   } finally {
     submitButton.disabled = false;
   }
@@ -1325,37 +2020,36 @@ document.querySelector('[data-auth-form="login"]').addEventListener("submit", as
   event.preventDefault();
   const form = event.currentTarget;
   const username = form.elements.username.value.trim();
-  const normalizedUsername = normalizeUsername(username);
   const password = form.elements.password.value;
   const submitButton = form.querySelector('[type="submit"]');
 
   showAuthFeedback("login");
   if (!username || !password) {
-    showAuthFeedback("login", "请输入用户名和密码。");
+    showAuthFeedback("login", t("auth.errRequired"));
     return;
   }
 
   submitButton.disabled = true;
   try {
-    const account = readDemoAccounts().find((entry) => entry.username === normalizedUsername);
-    if (!account || await derivePasswordVerifier(password, account.salt, account.iterations) !== account.verifier) {
-      showAuthFeedback("login", "用户名或密码不正确。");
-      return;
-    }
-    localStorage.setItem(AUTH_SESSION_KEY, normalizedUsername);
+    const result = await apiRequest("/api/login", { method: "POST", body: { username, password } });
     form.reset();
-    enterPlatform(account.displayName || account.username);
+    await enterPlatform(result.user);
   } catch (error) {
-    console.error("演示账户登录失败。", error);
-    showAuthFeedback("login", "无法读取本地账户，请检查浏览器存储和 Web Crypto 支持。");
+    showAuthFeedback("login", error.message);
   } finally {
     submitButton.disabled = false;
   }
 });
 
-document.querySelector("[data-auth-logout]").addEventListener("click", () => {
-  localStorage.removeItem(AUTH_SESSION_KEY);
+document.querySelector("[data-auth-logout]").addEventListener("click", async () => {
+  try {
+    await apiRequest("/api/logout", { method: "POST", body: {} });
+  } catch (error) {
+    showToast(t("dyn.logoutFailed", { message: error.message }));
+    return;
+  }
   authenticatedUsername = "";
+  csrfToken = "";
   closeRoundExperience();
   closeWallet();
   closeModal();
@@ -1366,27 +2060,19 @@ document.querySelector("[data-auth-logout]").addEventListener("click", () => {
   document.querySelector("#login-username").focus();
 });
 
-try {
-  const savedUsername = localStorage.getItem(AUTH_SESSION_KEY);
-  const account = savedUsername && readDemoAccounts().find((entry) => entry.username === savedUsername);
-  if (account) {
-    enterPlatform(account.displayName || account.username);
-  } else if (savedUsername) {
-    localStorage.removeItem(AUTH_SESSION_KEY);
-  }
-} catch (error) {
-  console.error("无法恢复本地演示账户。", error);
-  showAuthFeedback("login", "无法读取本地账户，请检查浏览器存储。");
-}
-
-renderSavedRoundActivity();
-const resumedRoundLevel = Object.entries(poolRounds)
-  .filter(([, round]) => round.endsAt > 0 && !round.settled)
-  .map(([level]) => Number(level))
-  .sort((first, second) => poolRounds[second].endsAt - poolRounds[first].endsAt)[0];
-if (authenticatedUsername && resumedRoundLevel) openRoundExperience(resumedRoundLevel);
+apiRequest("/api/session")
+  .then((session) => enterPlatform(session.user))
+  .catch((error) => {
+    if (error.message !== "请先登录。") {
+      showAuthFeedback("login", t("auth.errBackend", { message: error.message }));
+    }
+  });
 
 setInterval(() => {
   renderPoolStates();
   renderRoundExperience();
+  if (authenticatedUsername && Date.now() - lastStateSyncAt > 10_000) {
+    lastStateSyncAt = Date.now();
+    refreshServerState().catch((error) => showToast(t("dyn.syncFailed", { message: error.message })));
+  }
 }, 250);

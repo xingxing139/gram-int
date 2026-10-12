@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f4f6fb" />
+    <title>GRAM · 管理后台</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css?v=live-3" />
+    <link rel="stylesheet" href="./admin.css?v=live-3" />
+    <script src="./admin.js?v=live-3" defer></script>
+  </head>
+  <body>
+    <main class="admin-shell">
+      <header class="admin-header">
+        <a class="brand" href="./index.html" aria-label="返回 GRAM 平台">
+          <span class="brand-mark" aria-hidden="true">G</span>
+          <span class="brand-copy"><span class="brand-name">GRAM</span><span class="brand-caption">ADMIN CONSOLE</span></span>
+        </a>
+        <div class="admin-header-actions">
+          <span class="admin-mode"><i></i>管理后台</span>
+          <a class="admin-back" href="./index.html">返回平台</a>
+          <button type="button" class="logout-button" data-admin-logout hidden>退出</button>
+        </div>
+      </header>
+
+      <section class="admin-login glass-panel" data-admin-login aria-labelledby="admin-login-heading">
+        <span class="section-kicker">AUTHORIZED PERSONNEL</span>
+        <h1 id="admin-login-heading">管理后台登录</h1>
+        <p>仅使用通过环境变量配置的管理员账户，或由主后台添加的代理账户。普通账户无权访问管理数据；代理登录后只能查看属于自己名下的用户与订单数据。</p>
+        <form data-admin-login-form>
+          <label for="admin-username">管理员用户名</label>
+          <input id="admin-username" name="username" autocomplete="username" required />
+          <label for="admin-password">管理员密码</label>
+          <input id="admin-password" name="password" type="password" autocomplete="current-password" required />
+          <p class="admin-feedback" data-admin-login-feedback aria-live="polite"></p>
+          <button class="auth-submit" type="submit">安全登录 <span>↗</span></button>
+        </form>
+        <p class="admin-security-note">本后台用于平台数据管理与资金审核，请妥善保管管理员账户，不要将服务直接暴露到公网。</p>
+      </section>
+
+      <section class="admin-dashboard" data-admin-dashboard hidden>
+        <div class="admin-page-heading">
+          <div><span class="section-kicker">CONTROL PLANE</span><h1 data-admin-page-title>平台总览</h1><p>所有规则变更和管理操作均记录在审计日志中。</p></div>
+          <span class="admin-account-label">管理员：<strong data-admin-username></strong></span>
+        </div>
+        <p class="admin-notice"><strong>透明结算规则：</strong>后台只能设置各池公开中奖概率，规则在用户下注前展示并在轮次中锁定。不能指定特定用户输赢；结算使用服务器随机数承诺，结算后可核验。</p>
+        <p class="admin-feedback" data-admin-feedback role="status" aria-live="polite"></p>
+
+        <div class="admin-workspace">
+          <nav class="admin-nav" aria-label="后台管理模块">
+            <span>控制台模块</span>
+            <a href="#overview">总览</a><a href="#users">用户管理</a><a href="#create-users">生成用户</a><a href="#agents">代理管理</a><a href="#addresses">充值地址</a><a href="#wallet">充值提现</a>
+            <a href="#rounds">下注管理</a><a href="#pools">铸造池规则</a><a href="#holdings">用户典藏</a>
+            <a href="#gifts">礼物目录</a><a href="#audit">操作审计</a>
+          </nav>
+          <div class="admin-content">
+
+        <section class="admin-overview" id="overview" aria-label="平台数据总览">
+          <article class="admin-stat glass-panel"><span>注册用户</span><strong data-stat-users>0</strong><small data-stat-user-status>正常 0 · 已停用 0</small></article>
+          <article class="admin-stat glass-panel"><span>代理账户</span><strong data-stat-agents>0</strong><small data-stat-agent-status>正常 0 · 已停用 0</small></article>
+          <article class="admin-stat glass-panel"><span>账户总余额</span><strong><span data-stat-balance>0</span> <small>GRAM</small></strong><small>平台资金账本</small></article>
+          <article class="admin-stat glass-panel"><span>下注记录</span><strong data-stat-rounds>0</strong><small data-stat-open-rounds>未结算 0</small></article>
+          <article class="admin-stat glass-panel"><span>资金记录</span><strong data-stat-wallet-count>0</strong><small><span data-stat-wallet-volume>0</span> GRAM 流水 · 待审 <span data-stat-wallet-pending>0</span></small></article>
+        </section>
+
+        <section class="admin-section glass-panel" id="create-users">
+          <div class="admin-section-heading"><div><span class="section-kicker">CREATE USER</span><h2>生成用户</h2></div><span>直接创建带邀请码的账户</span></div>
+          <p class="admin-section-note">由主后台直接创建用户账户，系统会自动生成专属邀请码。填写上级用户 ID 时，该用户将计入对应代理或管理员名下。</p>
+          <form class="admin-gift-form" data-admin-user-form>
+            <label>用户名<input name="username" pattern="[a-zA-Z0-9._-]{3,24}" maxlength="24" placeholder="3–24 位字母、数字或 . _ -" required /></label>
+            <label>显示名称<input name="displayName" maxlength="40" placeholder="留空则使用用户名" /></label>
+            <label>登录密码<input name="password" type="password" minlength="8" maxlength="128" placeholder="至少 8 位" required /></label>
+            <label>上级用户 ID<input name="invitedBy" type="number" min="1" placeholder="留空为平台直属用户" /></label>
+            <button class="admin-primary" type="submit">创建用户并生成邀请码</button>
+          </form>
+        </section>
+
+        <section class="admin-section glass-panel" id="agents">
+          <div class="admin-section-heading"><div><span class="section-kicker">AGENTS</span><h2>代理管理</h2></div><span data-admin-agent-count>0 个代理</span></div>
+          <p class="admin-section-note">添加代理后，该账户可使用自己的邀请码发展用户；代理登录后台只能查看属于自己名下的用户管理与下单管理数据。每个用户注册后都会获得专属邀请码，使用谁的邀请码注册，用户就计入谁的名下。</p>
+          <form class="admin-gift-form" data-admin-agent-form>
+            <label>代理用户名<input name="username" pattern="[a-zA-Z0-9._-]{3,24}" maxlength="24" placeholder="3–24 位字母、数字或 . _ -" required /></label>
+            <label>登录密码<input name="password" type="password" minlength="8" maxlength="128" placeholder="至少 8 位" required /></label>
+            <button class="admin-primary" type="submit">添加代理</button>
+          </form>
+          <div class="admin-table-wrap"><table><thead><tr><th>代理账户</th><th>专属邀请码</th><th>状态</th><th>名下用户</th><th>创建时间</th><th>操作</th></tr></thead><tbody data-admin-agents></tbody></table></div>
+          <div class="admin-pagination" data-pagination="agents"><button class="admin-small-button" type="button" data-page-step="-1" data-page-target="agents">‹ 上一页</button><span class="admin-pagination-info" data-pagination-info="agents">第 1 / 1 页</span><button class="admin-small-button" type="button" data-page-step="1" data-page-target="agents">下一页 ›</button></div>
+          <p class="admin-section-note">重新生成邀请码后，旧邀请码立即失效。代理账户可停用，停用后其名下用户无法继续使用该邀请码注册。</p>
+        </section>
+
+        <section class="admin-section glass-panel" id="addresses">
+          <div class="admin-section-heading"><div><span class="section-kicker">DEPOSIT ADDRESSES</span><h2>充值地址管理</h2></div><span data-address-count>0 个地址</span></div>
+          <p class="admin-section-note">添加的地址会显示在用户充值弹窗中，并自动生成对应二维码；用户需选择地址后才能提交充值申请。可随时修改、停用或删除，停用后用户端立即不再展示。</p>
+          <form class="admin-gift-form" data-address-form>
+            <input type="hidden" name="id" value="" />
+            <label>地址名称<input name="label" maxlength="40" placeholder="例如：USDT-TRC20" required /></label>
+            <label>充值地址<input name="address" maxlength="160" placeholder="钱包地址或收款账号" required /></label>
+            <label>备注（选填）<input name="note" maxlength="200" placeholder="例如：最低充值 10 GRAM" /></label>
+            <button class="admin-primary" type="submit">保存地址</button>
+          </form>
+          <div class="admin-table-wrap"><table><thead><tr><th>名称</th><th>地址 / 二维码</th><th>备注</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead><tbody data-admin-addresses></tbody></table></div>
+        </section>
+
+        <section class="admin-section glass-panel" id="users">
+          <div class="admin-section-heading"><div><span class="section-kicker">USERS</span><h2>用户账户</h2></div><span data-admin-user-count>0 个账户</span></div>
+          <div class="admin-filter-row"><label>搜索用户<input type="search" data-user-search placeholder="用户名或用户 ID" /></label><label>账户状态<select data-user-status-filter><option value="all">全部状态</option><option value="active">正常</option><option value="suspended">已停用</option></select></label><label>账户类型<select data-user-role-filter><option value="all">全部类型</option><option value="user">普通用户</option><option value="agent">代理</option><option value="admin">管理员</option></select></label><button class="admin-small-button" type="button" data-user-filter-reset>重置筛选</button></div>
+          <div class="admin-table-wrap"><table><thead><tr><th>用户</th><th>权限</th><th>邀请码</th><th>上级</th><th>状态</th><th>账户余额</th><th>注册时间</th><th>操作</th></tr></thead><tbody data-admin-users></tbody></table></div>
+          <div class="admin-pagination" data-pagination="users"><button class="admin-small-button" type="button" data-page-step="-1" data-page-target="users">‹ 上一页</button><span class="admin-pagination-info" data-pagination-info="users">第 1 / 1 页</span><button class="admin-small-button" type="button" data-page-step="1" data-page-target="users">下一页 ›</button></div>
+          <p class="admin-section-note">停用账户会阻止后续登录和下单；历史下注的随机结算结果不受管理操作影响。余额调整要求填写原因并进入审计记录。</p>
+        </section>
+
+        <section class="admin-section glass-panel" id="wallet">
+          <div class="admin-section-heading"><div><span class="section-kicker">WALLET · APPROVAL QUEUE</span><h2>充值 / 提现审核</h2></div><span data-wallet-pending-count>待审核 0 笔</span></div>
+          <p class="admin-section-note">充值在确认前不会入账。提现申请提交时冻结余额；确认完成扣款，取消则解冻。所有操作均记录于审计日志。</p>
+          <div class="admin-filter-row"><label>申请状态<select data-wallet-request-filter><option value="pending">待审核</option><option value="all">全部申请</option><option value="approved">已确认</option><option value="cancelled">已取消</option></select></label><label>申请类型<select data-wallet-kind-filter><option value="all">全部类型</option><option value="deposit">充值</option><option value="withdraw">提现</option></select></label><label>搜索用户<input type="search" data-wallet-user-search placeholder="用户名或用户 ID" /></label></div>
+          <div class="admin-table-wrap"><table><thead><tr><th>申请 ID</th><th>用户</th><th>类型</th><th>金额</th><th>收款信息</th><th>提交时间</th><th>审核结果 / 备注</th><th>操作</th></tr></thead><tbody data-admin-wallet-requests></tbody></table></div>
+          <div class="admin-pagination" data-pagination="walletRequests"><button class="admin-small-button" type="button" data-page-step="-1" data-page-target="walletRequests">‹ 上一页</button><span class="admin-pagination-info" data-pagination-info="walletRequests">第 1 / 1 页</span><button class="admin-small-button" type="button" data-page-step="1" data-page-target="walletRequests">下一页 ›</button></div>
+          <div class="admin-section-heading admin-ledger-heading"><div><span class="section-kicker">SETTLED LEDGER</span><h2>已入账资金记录</h2></div><span data-pagination-total="walletEvents"></span></div>
+          <div class="admin-filter-row"><label>记录类型<select data-wallet-event-filter><option value="all">全部类型</option><option value="deposit">已确认充值</option><option value="withdraw">已确认提现</option></select></label></div>
+          <div class="admin-table-wrap"><table><thead><tr><th>记录 ID</th><th>用户</th><th>类型</th><th>金额</th><th>时间</th></tr></thead><tbody data-admin-wallet-events></tbody></table></div>
+          <div class="admin-pagination" data-pagination="walletEvents"><button class="admin-small-button" type="button" data-page-step="-1" data-page-target="walletEvents">‹ 上一页</button><span class="admin-pagination-info" data-pagination-info="walletEvents">第 1 / 1 页</span><button class="admin-small-button" type="button" data-page-step="1" data-page-target="walletEvents">下一页 ›</button></div>
+        </section>
+
+        <section class="admin-section glass-panel" id="rounds">
+          <div class="admin-section-heading"><div><span class="section-kicker">ROUND HISTORY · RISK REVIEW</span><h2>下注管理 / 风险审核</h2></div><span data-pagination-total="rounds"></span></div>
+          <div class="admin-filter-row"><label>搜索用户或轮次<input type="search" data-round-search placeholder="用户名或轮次 ID" /></label><label>审核状态<select data-round-risk-filter><option value="all">全部记录</option><option value="flagged">已标记</option><option value="clear">未标记</option></select></label></div>
+          <p class="admin-section-note">对未结算轮次可设置「包赢」或「包输」干预结果，结算时按干预结果派奖；选择「恢复」则回到随机承诺值原本决定的结果。干预操作会记录审计日志。风险标记只用于审计和后续风控。</p>
+          <div class="admin-table-wrap"><table><thead><tr><th>用户 / 轮次</th><th>铸造池</th><th>下注额</th><th>公开概率</th><th>干预结果</th><th>输赢</th><th>风险状态</th><th>随机承诺值 SHA-256</th><th>操作</th></tr></thead><tbody data-admin-rounds></tbody></table></div>
+          <div class="admin-pagination" data-pagination="rounds"><button class="admin-small-button" type="button" data-page-step="-1" data-page-target="rounds">‹ 上一页</button><span class="admin-pagination-info" data-pagination-info="rounds">第 1 / 1 页</span><button class="admin-small-button" type="button" data-page-step="1" data-page-target="rounds">下一页 ›</button></div>
+        </section>
+
+        <section class="admin-section glass-panel" id="pools">
+          <div class="admin-section-heading"><div><span class="section-kicker">POOL SETTINGS</span><h2>铸造池规则和公开概率</h2></div></div>
+          <div class="admin-pools" data-admin-pools></div>
+        </section>
+
+        <section class="admin-section glass-panel" id="holdings">
+          <div class="admin-section-heading"><div><span class="section-kicker">USER HOLDINGS</span><h2>用户典藏记录</h2></div><span data-pagination-total="holdings"></span></div>
+          <div class="admin-table-wrap"><table><thead><tr><th>用户</th><th>礼物</th><th>状态</th><th>操作</th></tr></thead><tbody data-admin-holdings></tbody></table></div>
+          <div class="admin-pagination" data-pagination="holdings"><button class="admin-small-button" type="button" data-page-step="-1" data-page-target="holdings">‹ 上一页</button><span class="admin-pagination-info" data-pagination-info="holdings">第 1 / 1 页</span><button class="admin-small-button" type="button" data-page-step="1" data-page-target="holdings">下一页 ›</button></div>
+        </section>
+
+        <section class="admin-section glass-panel" id="gifts">
+          <div class="admin-section-heading"><div><span class="section-kicker">GIFT CATALOG</span><h2>典藏品目录管理</h2></div></div>
+          <form class="admin-gift-form" data-admin-gift-form>
+            <label>礼物编号<input name="slug" pattern="[a-zA-Z0-9-]{2,80}" maxlength="80" placeholder="例如: stargift" required /></label>
+            <label>中文名称<input name="name" maxlength="80" required /></label>
+            <label>英文名称<input name="english" maxlength="80" required /></label>
+            <label>分类<input name="category" maxlength="80" placeholder="animals / accessories ..." required /></label>
+            <button class="admin-primary" type="submit">新增或更新目录项</button>
+          </form>
+          <div class="admin-gifts" data-admin-gifts></div>
+        </section>
+
+        <section class="admin-section glass-panel" id="audit">
+          <div class="admin-section-heading"><div><span class="section-kicker">AUDIT TRAIL</span><h2>管理审计日志</h2></div><span data-pagination-total="audit"></span></div>
+          <div class="admin-audit-list" data-admin-audit></div>
+          <div class="admin-pagination" data-pagination="audit"><button class="admin-small-button" type="button" data-page-step="-1" data-page-target="audit">‹ 上一页</button><span class="admin-pagination-info" data-pagination-info="audit">第 1 / 1 页</span><button class="admin-small-button" type="button" data-page-step="1" data-page-target="audit">下一页 ›</button></div>
+        </section>
+          </div>
+        </div>
+      </section>
+      <footer class="admin-footer">GRAM · ADMIN CONSOLE <span>SECURE · AUDITED · CONTROLLED</span></footer>
+    </main>
+  </body>
+</html>
