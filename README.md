@@ -30,43 +30,50 @@ ruby server.rb
 
 适配层负责占位符转换（`?` → `$1, $2`）、布尔值归一、异常归一（唯一/外键冲突统一为 409）与两种库的 schema 差异（`INTEGER PRIMARY KEY AUTOINCREMENT` ↔ `BIGSERIAL`）。
 
-## 部署到免费平台（Render + PostgreSQL）
+## 部署到免费平台（Koyeb + Neon，无需信用卡）
 
-推荐组合：**Render 免费 Web Service 运行 Ruby 服务** + **PostgreSQL 作为数据库**（可用 Render 自带免费库，或 Supabase 免费库）。
+推荐组合：**Koyeb 免费 Web Service 运行容器** + **Neon 免费 PostgreSQL**。全程不需要信用卡，无冷启动休眠，推送 GitHub 后可自动部署。
 
-> 注意：免费平台的文件系统是临时的，重启或重新部署后 SQLite 数据会全部丢失，因此云端**必须**使用 PostgreSQL。
-> 本仓库的 `render.yaml` 已内置 PostgreSQL 数据库配置，推送后在 Render 控制台选择 New → Blueprint 即可一键创建。
+仓库已提供 `Dockerfile` 和 `.dockerignore`，Koyeb 会用它构建镜像（也可用于 Hugging Face Spaces、Cloud Run）。
 
-需要设置的变量（在 Render 控制台填写，不要提交进仓库）：
+### 第一步：创建免费数据库（Neon）
 
-- `DATABASE_URL`：Render 蓝图会自动从所建数据库注入；用 Supabase 则填其连接串
-- `BIND_ADDRESS`：`0.0.0.0`（平台需要监听所有网卡）
-- `GRAM_ADMIN_USERNAME` / `GRAM_ADMIN_PASSWORD`：管理员账户，密码至少 12 位
+1. 打开 <https://neon.tech> 用 GitHub 登录，创建一个 Project
+2. 在 Project 的 Dashboard 复制 **Connection string**，形如
+   `postgres://user:password@ep-xxx.us-east-2.aws.neon.tech/dbname?sslmode=require`
+3. 该连接串即稍后要填的 `DATABASE_URL`
 
-代码侧已具备的部署条件：`server.rb` 支持 `PORT` 与 `BIND_ADDRESS` 环境变量；`Gemfile` 声明了 `webrick`（Ruby 3 起已移出标准库）、`sqlite3` 与 `pg`；`/api/health` 可作为健康检查端点。
+免费额度为 0.5GB 存储；闲置 5 分钟后计算实例会自动暂停，下次访问数秒内唤醒，不影响数据。
 
-Render 免费版在 15 分钟无请求后会休眠，下次访问需要 30–50 秒冷启动；如需常驻可升级到付费实例。
+### 第二步：部署到 Koyeb
+
+1. 打开 <https://app.koyeb.com> 用 GitHub 登录
+2. **Create Service** → 选择 GitHub 仓库 `xingxing139/gram-int`
+3. Builder 选 **Dockerfile**（会自动识别仓库根目录的 Dockerfile）
+4. 配置项：
+   - **Port**：`8000`（容器内由 `$PORT` 注入；若平台默认其他端口以控制台为准）
+   - **Health check**：路径填 `/api/health`，端口与外网端口一致
+   - **Instance**：选 Free 档（256MB 内存 / 0.1 vCPU）
+5. **Environment variables** 添加以下变量（Secret 类型会加密存储）：
+
+   | 变量 | 值 |
+   |---|---|
+   | `DATABASE_URL` | 第一步的 Neon 连接串 |
+   | `BIND_ADDRESS` | `0.0.0.0` |
+   | `GRAM_ADMIN_USERNAME` | `admin` |
+   | `GRAM_ADMIN_PASSWORD` | 至少 12 位的强密码 |
+
+6. 部署完成后 Koyeb 会分配一个 `https://xxx.koyeb.app` 域名，首页与管理后台（`/admin.html`）即可访问
+
+### 注意事项
+
+- **务必设置 `DATABASE_URL`**。免费平台的文件系统是临时的，重启或重新部署后容器内 SQLite 数据会全部丢失。
+- 管理员密码必须通过环境变量覆盖代码里的默认值，否则任何拿到仓库的人都能登录后台。
+- 若使用 Hugging Face Spaces 代替 Koyeb，需把容器端口改为 `7860`，并在 Space 的 README 顶部添加 Spaces 配置。
 
 ### 关于 Supabase 的说明
 
-Supabase 不提供 Ruby 运行环境（仅 PostgreSQL / Auth / 边缘函数），无法直接托管本平台的后端服务。但它非常适合作为**数据库层**：把上面表格里的 `DATABASE_URL` 指向 Supabase 的 PostgreSQL 连接串即可，Ruby 服务仍运行在 Render。若希望完全迁到 Supabase（含边缘函数重写全部后端逻辑），需要重写约 1500 行业务代码并把权限模型迁移到数据库层，工作量和风险都远大于此方案。
-
-管理员账户已在代码中固定配置，首次启动会自动创建。如需覆盖，可设置环境变量 `GRAM_ADMIN_USERNAME` 和 `GRAM_ADMIN_PASSWORD`（密码不少于 12 位）后再启动。数据写入 `data/gram.sqlite3`，此目录已加入 `.gitignore`。管理员凭据不要提交到公开仓库。
-
-## 后端行为
-
-- 用户密码由服务端使用每用户随机盐和 PBKDF2-HMAC-SHA256 派生后保存。登录使用 HttpOnly、SameSite 会话 Cookie 和 CSRF 令牌；管理 API 检查管理员角色。
-- 充值、转出、铸造、收益领取、用户停用、余额调整及典藏管理由 SQLite 服务端事务处理。充值与提现需经后台审核确认后才更新账户余额。
-- 管理后台包含用户筛选、账户停用/恢复及带原因的余额调整；充提账本和下注记录可检索；异常订单可添加/清除风险标记，所有动作写入审计日志。
-- 风险标记用于复核和后续风控，不会改变已接受下注的赔率、结算时间或随机证明。停用账户只阻止该账户之后的登录和下注。
-- 铸造池概率在用户下注前公开；管理员只能调整对所有新轮次生效的池级规则，轮次开始时锁定规则快照。
-- 管理员可对未结算轮次设置包赢或包输干预结果（也可取消恢复随机），该操作会写介入审计日志；此能力仅限主管理员，代理无权使用。
-- 每轮使用服务器随机秘密承诺。下注时显示秘密的 SHA-256 承诺；结算后公开秘密、抽样序号和抽样值，供用户按页面说明核验。管理操作会写入后台审计日志。
-- Telegram 礼物图片引用 Fragment 的公开目录预览。目录增删改和上/下架可在管理后台操作；新增礼物需有对应的公开图片资源才能显示图片。
-
-## 部署与安全
-
-本项目数据保存在本机 SQLite 数据库。要正式对外提供服务，必须另行配置受 HTTPS 保护的应用主机、持久化数据库、备份、监控和合规控制；不要把服务直接暴露到公网。建议为管理员设置强密码，并妥善保管数据库文件。
+Supabase 不提供 Ruby 运行环境（仅 PostgreSQL / Auth / 边缘函数），无法直接托管本平台的后端服务，但非常适合作为**数据库层**：把 `DATABASE_URL` 指向 Supabase 免费库的连接串即可。若希望完全迁到 Supabase（含边缘函数重写全部后端逻辑），需要重写约 1500 行业务代码并把权限模型迁移到数据库层，工作量和风险都远大于此方案。
 
 ## 项目文件
 
@@ -75,5 +82,5 @@ Supabase 不提供 Ruby 运行环境（仅 PostgreSQL / Auth / 边缘函数）�
 - `db.rb`：数据库适配层，统一封装 SQLite 与 PostgreSQL（连接、占位符、事务、异常）
 - `server.rb`：Ruby/WEBrick API、会话、业务规则、审计和持久化
 - `data/gram.sqlite3`：本机运行时自动创建的 SQLite 数据库（不提交）
-- `Gemfile` / `render.yaml`：依赖声明与 Render 免费部署配置
+- `Gemfile` / `Dockerfile` / `.dockerignore`：依赖声明与容器化部署配置（Koyeb 等）
 - `favicon.svg`：GRAM 网站图标
