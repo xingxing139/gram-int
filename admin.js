@@ -90,7 +90,8 @@ async function request(path, options = {}) {
   if (options.body !== undefined) headers["Content-Type"] = "application/json";
   if (["POST", "PATCH", "PUT", "DELETE"].includes(method) && csrfToken) headers["X-CSRF-Token"] = csrfToken;
   const base = adminApiBase();
-  const response = await fetch(base ? `${base}${path}` : path, {
+  const target = base ? base + path.replace(/^\/api/, "") : path;
+  const response = await fetch(target, {
     method,
     credentials: base ? "include" : "same-origin",
     headers,

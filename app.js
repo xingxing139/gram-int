@@ -39,7 +39,10 @@ function apiBase() {
 
 function apiUrl(path) {
   const base = apiBase();
-  return base ? `${base}${path}` : path;
+  if (!base) return path;
+  // Supabase 函数地址已含 /functions/v1/api，业务路径的 /api 前缀需去掉，
+  // 否则会拼成 /api/api/xxx 导致路由 404
+  return base + path.replace(/^\/api/, "");
 }
 
 /* 跨域请求 Supabase 时必须带上 Cookie；

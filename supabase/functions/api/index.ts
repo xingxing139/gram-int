@@ -612,12 +612,12 @@ register("PATCH", "/api/admin/wallet-requests/:id", async ({ request, route, bod
   const note = String(body["reason"] ?? "").trim();
   if (!["approve", "cancel"].includes(decision)) throw new ApiError(422, "审核操作无效。");
   if (note.length < 3 || note.length > 200) throw new ApiError(422, "请填写 3–200 个字符的审核备注。");
-  const request = await selectOne("wallet_requests", [{ column: "id", operator: "eq", value: requestId }]);
+  const walletRequest = await selectOne("wallet_requests", [{ column: "id", operator: "eq", value: requestId }]);
   if (!request) throw new ApiError(404, "资金申请不存在。");
-  if (String(request["status"]) !== "pending") throw new ApiError(409, "该申请已处理，不能重复审核。");
+  if (String(walletRequest["status"]) !== "pending") throw new ApiError(409, "该申请已处理，不能重复审核。");
   if (session.user.role === "agent") {
     const owner = await selectOne("users", [
-      { column: "id", operator: "eq", value: Number(request["user_id"]) },
+      { column: "id", operator: "eq", value: Number(walletRequest["user_id"]) },
     ], "role,invited_by");
     if (!owner || String(owner["role"]) !== "user" || Number(owner["invited_by"]) !== session.user.id) {
       throw new ApiError(403, "只能审核自己名下用户的申请。");
@@ -632,9 +632,9 @@ register("PATCH", "/api/admin/wallet-requests/:id", async ({ request, route, bod
     });
     await writeAudit(session.user.id, `wallet_request_${decision}`, {
       requestId,
-      userId: Number(request["user_id"]),
-      kind: String(request["kind"]),
-      amountUnits: Number(request["amount_units"]),
+      userId: Number(walletRequest["user_id"]),
+      kind: String(walletRequest["kind"]),
+      amountUnits: Number(walletRequest["amount_units"]),
       reason: note,
     });
     return jsonOk({ ok: true, status }, request);
@@ -820,6 +820,8 @@ function routePath(url: string): string {
   const { pathname } = new URL(url);
   const marker = "/functions/v1/api";
   const index = pathname.indexOf(marker);
+  // 边缘运行时可能剥掉 /functions/v1/api 前缀（pathname 变成 /api/xxx），
+  // 也可能原样保留；两种形态剥完都正好是 /api/xxx，直接返回即可。
   if (index === -1) return pathname;
   return pathname.slice(index + marker.length) || "/";
 }
@@ -827,29 +829,48 @@ function routePath(url: string): string {
 // ---------------------------------------------------------------------
 // 入口
 // ---------------------------------------------------------------------
+function pathMatches(pattern: RegExp, value: string): boolean {
+  return pattern.test(value);
+}
+
 Deno.serve(async (request: Request): Promise<Response> => {
   const preflight = handleOptions(request);
   if (preflight) return preflight;
 
   const url = new URL(request.url);
-  const route = routePath(request.url);
   const query = url.searchParams;
 
   try {
     const body = await readJsonBody(request);
-    const match = routes.find((entry) => entry.method === request.method && entry.pattern.test(route));
+    // 边缘运行时可能保留或剥掉 /functions/v1/api 前缀，两种形态都尝试匹配
+    const candidates = [routePath(request.url), url.pathname];
+    let match: RouteDefinition | undefined;
+    let route = "";
+    for (const candidate of candidates) {
+      match = routes.find((entry) => entry.method === request.method && pathMatches(entry.pattern, candidate));
+      if (match) {
+        route = candidate;
+        break;
+      }
+    }
     if (!match) {
       // 兼容把整段路径当作一个参数传递的调用方
-      const fallback = routes.find((entry) => {
-        if (entry.method !== request.method) return false;
-        const tokens = entry.pattern.source.replace(/^\^|\$$/g, "").split("/");
-        const parts = route.split("/");
-        if (tokens.length !== parts.length) return false;
-        return tokens.every((token, index) => token.startsWith(":") || token === parts[index]);
-      });
-      if (!fallback) return jsonError(404, "接口不存在。", request);
-      return await fallback.handler({ request, route, body, query });
+      for (const candidate of candidates) {
+        const fallback = routes.find((entry) => {
+          if (entry.method !== request.method) return false;
+          const tokens = entry.pattern.source.replace(/^\^|\$$/g, "").split("/");
+          const parts = candidate.split("/");
+          if (tokens.length !== parts.length) return false;
+          return tokens.every((token, index) => token.startsWith(":") || token === parts[index]);
+        });
+        if (fallback) {
+          match = fallback;
+          route = candidate;
+          break;
+        }
+      }
     }
+    if (!match) return jsonError(404, "接口不存在。", request);
     return await match.handler({ request, route, body, query });
   } catch (error) {
     if (error instanceof ApiError) return jsonError(error.status, error.message, request);
