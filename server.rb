@@ -112,8 +112,24 @@ class GramService
     ensure_invitation_columns
   end
 
+  # 建表策略按后端区分：
+  #   SQLite   → 随进程自动建表（本地零配置）
+  #   Postgres → 随进程建表（适配层用的是 $ 占位符的 PG schema）
+  #   MySQL    → 不在此处建表，须先执行 mysql/setup.sh；此处只校验存在性
   def run_schema(prefix)
-    database.execute_batch("#{prefix}#{database.sqlite? ? sqlite_schema : postgres_schema}")
+    if database.sqlite?
+      database.execute_batch("#{prefix}#{sqlite_schema}")
+    elsif database.postgres?
+      database.execute_batch(postgres_schema)
+    end
+    verify_mysql_schema_ready if database.mysql?
+  end
+
+  def verify_mysql_schema_ready
+    tables = %w[users pool_configs gifts rounds wallet_events wallet_requests holdings admin_audit deposit_addresses]
+    missing = tables.reject { |table| database.column_names(table).any? }
+    return if missing.empty?
+    raise "MySQL 数据库缺少表：#{missing.join(', ')}。请先执行：MYSQL_PASSWORD='你的root密码' bash mysql/setup.sh"
   end
 
   def sqlite_pragma_prefix
@@ -366,13 +382,16 @@ class GramService
     ensure_column("users", "invitation_code", "TEXT")
     ensure_column("users", "invited_by", "INTEGER REFERENCES users(id)")
     ensure_column("rounds", "forced_outcome", "TEXT")
-    database.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_invitation_code_idx ON users(invitation_code)")
+    # MySQL 不支持 CREATE INDEX IF NOT EXISTS；数据目录里已由 schema.sql 建好索引
+    unless database.mysql?
+      database.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_invitation_code_idx ON users(invitation_code)")
+    end
     migrate_users_role_constraint
   end
 
   def migrate_users_role_constraint
-    # PostgreSQL 建表时已包含 agent 角色，无需重建表
-    return if database.postgres?
+    # PostgreSQL / MySQL 建表时已包含 agent 角色，无需重建表
+    return if database.postgres? || database.mysql?
     create_sql = database.table_sql("users")
     return if create_sql.include?("'agent'")
 

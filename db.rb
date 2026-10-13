@@ -27,6 +27,10 @@ module GRAMDB
       @kind == :sqlite
     end
 
+    def mysql?
+      @kind == :mysql
+    end
+
     # 业务层统一使用此方法执行查询/写入，返回字符串键的 Hash 数组
     def execute(sql, *binds)
       rows = raw_execute(sql, binds)
@@ -191,13 +195,22 @@ module GRAMDB
       @in_transaction = false
     end
 
-    # MySQL 方言转换：CAST(x AS TEXT) → CAST(x AS CHAR)
+    # MySQL 方言转换：
+    #   CAST(x AS TEXT)  → CAST(x AS CHAR)   （SQLite 写法）
+    #   t.rowid          → t.id               （SQLite 伪列，MySQL 用主键）
+    #   INSERT OR IGNORE → INSERT IGNORE      （在 server.rb 中另行处理）
     def translate_dialect(sql)
-      sql.gsub(/\bAS\s+TEXT\b/i, "AS CHAR")
+      translated = sql.gsub(/\bAS\s+TEXT\b/i, "AS CHAR")
+      translated.gsub(/(\w+)\.rowid\b/i) { "#{Regexp.last_match(1)}.id" }
+                 .gsub(/\s+COLLATE\s+NOCASE\b/i, "")
     end
 
+    # mysql2 对 INSERT / UPDATE / DDL 返回 nil，对 SELECT 返回 Result；
+    # 统一转成数组，供 Base#execute 的 map 使用。
     def raw_execute(sql, binds)
-      @raw.query(interpolate(translate_dialect(sql), binds))
+      result = @raw.query(interpolate(translate_dialect(sql), binds))
+      return [] if result.nil?
+      result.respond_to?(:to_a) ? result.to_a : Array(result)
     end
 
     # 把 ? 替换为转义后的字面量；跳过单引号字符串内部的 ?
@@ -239,16 +252,24 @@ module GRAMDB
       output
     end
 
-    # mysql2 的 escape 对字符串会自带单引号（如 'foo'），数字与 nil 也会正确处理，
-    # 因此这里不能再额外包一层引号，否则会出现 ''foo'' 这种双引号。
+    # 自行实现 SQL 字面量转义，不依赖 mysql2 各版本不一致的 escape 行为：
+    #   nil   -> NULL
+    #   布尔  -> 1 / 0
+    #   数值  -> 原样
+    #   字符串 -> 单引号包裹，内部 \ 变为 \\ ，' 变为 ''
     def escape_literal(value)
       case value
       when nil then "NULL"
       when true then "1"
       when false then "0"
       when Integer, Float then value.to_s
-      else @raw.escape(value.to_s)
+      else escape_string(value.to_s)
       end
+    end
+
+    def escape_string(text)
+      escaped = text.gsub("\\", "\\\\").gsub("'", "''")
+      "'" + escaped + "'"
     end
 
     def transaction_active?
