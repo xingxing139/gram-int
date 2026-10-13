@@ -187,8 +187,7 @@ export async function publicDepositAddresses(): Promise<Record<string, unknown>[
 
 // 结算该用户所有到期轮次（调用数据库函数）
 export async function settleDueRounds(userId: number): Promise<void> {
-  const { callRpc } = await import("./db.ts");
-  await callRpc("settle_due_rounds", { p_user_id: userId });
+  callRpc("settle_due_rounds", { p_user_id: userId });
 }
 
 export async function buildState(session: SessionContext): Promise<Record<string, unknown>> {

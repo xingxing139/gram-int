@@ -86,7 +86,7 @@ function register(method: string, pattern: string, handler: Handler): void {
 // ---------------- 公开 / 认证 ----------------
 
 register("GET", "/api/health", () =>
-  jsonOk({ status: "ok", mode: "supabase", realAssets: true }, request);
+  jsonOk({ status: "ok", mode: "supabase", realAssets: true }, request));
 
 register("POST", "/api/register", async ({ body }) => {
   const username = String(body["username"] ?? "").trim();

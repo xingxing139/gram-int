@@ -56,8 +56,7 @@ export async function createSession(userId: number): Promise<{ token: string; cs
   const csrf = randomHex(24);
   const digest = await sessionDigest(token);
   const expiresAt = Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS;
-  const { insertRow } = await import("./db.ts");
-  await insertRow("sessions", {
+  insertRow("sessions", {
     token_digest: digest,
     csrf_token: csrf,
     user_id: userId,
@@ -204,8 +203,7 @@ export async function generateInvitationCode(): Promise<string> {
 }
 
 export async function writeAudit(adminId: number, action: string, detail: unknown): Promise<void> {
-  const { insertRow } = await import("./db.ts");
-  await insertRow("admin_audit", {
+  insertRow("admin_audit", {
     admin_id: adminId,
     action,
     detail_json: JSON.stringify(detail),
