@@ -29,6 +29,47 @@ FN_URL="https://${PROJECT_REF}.supabase.co/functions/v1/api"
 say "项目: ${PROJECT_REF}"
 say "函数地址: ${FN_URL}"
 
+# ---- 0. 应用数据库迁移（建表 + 原子函数）----
+# 这一步不能省：Edge Function 依赖 0002_functions.sql 里的 6 个 RPC，
+# 漏掉它 /api/state、下注、审核都会失败。
+say "应用数据库迁移（supabase/migrations）..."
+python3 - "$PAT" "$PROJECT_REF" "$(cd "$(dirname "$0")" && pwd)/migrations" <<'PY' || die "迁移失败，请看上面的输出"
+import json, os, subprocess, sys, urllib.request
+
+pat, project, mig_dir = sys.argv[1], sys.argv[2], sys.argv[3]
+api = "https://api.supabase.com/v1/projects/" + project
+
+for name in sorted(os.listdir(mig_dir)):
+    if not name.endswith(".sql"):
+        continue
+    sql = open(os.path.join(mig_dir, name), encoding="utf-8").read()
+    payload = json.dumps({"query": sql}).encode("utf-8")
+    req = urllib.request.Request(api + "/database/query", data=payload, method="POST",
+                                 headers={"Authorization": "Bearer " + pat,
+                                          "Content-Type": "application/json"})
+    try:
+        urllib.request.urlopen(req, timeout=600).read()
+        print("  已应用", name)
+    except urllib.error.HTTPError as error:
+        print("  ", name, "失败 HTTP", error.code, error.read().decode()[:200])
+        sys.exit(1)
+
+check = ("SELECT string_agg(proname, ',') AS fns FROM pg_proc "
+         "WHERE pronamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'public')")
+req = urllib.request.Request(api + "/database/query", data=json.dumps({"query": check}).encode(),
+                             method="POST",
+                             headers={"Authorization": "Bearer " + pat,
+                                      "Content-Type": "application/json"})
+fns = json.loads(urllib.request.urlopen(req, timeout=120).read())[0]["fns"] or ""
+need = ["place_round", "settle_due_rounds", "resolve_wallet_request",
+        "submit_withdraw", "adjust_user_balance", "claim_earnings"]
+missing = [n for n in need if n not in fns]
+if missing:
+    print("  缺少 RPC 函数:", missing)
+    sys.exit(1)
+print("  6 个原子函数已就位")
+PY
+
 # ---- 1. 打包为单文件 ----
 say "打包 Edge Function ..."
 python3 supabase/bundle_function.py > /tmp/gram_fn_bundle.ts 2>/tmp/gram_fn_bundle.log || {
