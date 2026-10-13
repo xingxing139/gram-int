@@ -10,41 +10,48 @@ export class ApiError extends Error {
   }
 }
 
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, X-CSRF-Token, Authorization",
-  "Access-Control-Max-Age": "86400",
-};
-
-function buildHeaders(base: Record<string, string>): Record<string, string> {
-  return { ...base, ...CORS_HEADERS };
+// CORS：当前端用 credentials: "include" 跨站携带 Cookie 时，规范禁止
+# Access-Control-Allow-Origin: *，必须回显具体 Origin 并显式声明允许凭证。
+function corsHeaders(request: Request | null): Record<string, string> {
+  const origin = request?.headers.get("Origin") ?? "*";
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, X-CSRF-Token, Authorization",
+    "Access-Control-Max-Age": "86400",
+    "Vary": "Origin",
+  };
 }
 
-export function jsonOk(body: unknown, extraHeaders: Record<string, string> = {}): Response {
+function buildHeaders(base: Record<string, string>, request: Request | null = null): Record<string, string> {
+  return { ...base, ...corsHeaders(request) };
+}
+
+export function jsonOk(body: unknown, request: Request | null = null, extraHeaders: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body ?? { ok: true }), {
     status: 200,
     headers: buildHeaders({
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "no-store",
       ...extraHeaders,
-    }),
+    }, request),
   });
 }
 
-export function jsonError(status: number, message: string): Response {
+export function jsonError(status: number, message: string, request: Request | null = null): Response {
   return new Response(JSON.stringify({ error: message }), {
     status,
     headers: buildHeaders({
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "no-store",
-    }),
+    }, request),
   });
 }
 
 export function handleOptions(request: Request): Response | null {
   if (request.method !== "OPTIONS") return null;
-  return new Response(null, { status: 204, headers: CORS_HEADERS });
+  return new Response(null, { status: 204, headers: corsHeaders(request) });
 }
 
 export async function readJsonBody(request: Request): Promise<Record<string, unknown>> {

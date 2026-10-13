@@ -86,7 +86,7 @@ function register(method: string, pattern: string, handler: Handler): void {
 // ---------------- 公开 / 认证 ----------------
 
 register("GET", "/api/health", () =>
-  jsonOk({ status: "ok", mode: "supabase", realAssets: true }));
+  jsonOk({ status: "ok", mode: "supabase", realAssets: true }, request);
 
 register("POST", "/api/register", async ({ body }) => {
   const username = String(body["username"] ?? "").trim();
@@ -118,7 +118,7 @@ register("POST", "/api/register", async ({ body }) => {
     created_at: new Date().toISOString(),
   });
   const session = await createSession(Number(created["id"]));
-  return jsonOk({ user: publicUser(created), csrfToken: session.csrf }, { "Set-Cookie": session.cookie });
+  return jsonOk({ user: publicUser(created), csrfToken: session.csrf }, request, { "Set-Cookie": session.cookie });
 });
 
 register("POST", "/api/login", async ({ request, body }) => {
@@ -129,29 +129,29 @@ register("POST", "/api/login", async ({ request, body }) => {
     await verifyPassword(password, String(user["password_salt"]), String(user["password_hash"]));
   if (!valid) throw new ApiError(401, "用户名或密码不正确。");
   const session = await createSession(Number(user!["id"]));
-  return jsonOk({ user: publicUser(user!), csrfToken: session.csrf }, { "Set-Cookie": session.cookie });
+  return jsonOk({ user: publicUser(user!), csrfToken: session.csrf }, request, { "Set-Cookie": session.cookie });
 });
 
 register("POST", "/api/logout", async ({ request }) => {
   const session = await authenticate(request);
   if (session) await deleteSession(session.token);
-  return jsonOk({ ok: true }, { "Set-Cookie": clearSessionCookie() });
+  return jsonOk({ ok: true }, request, { "Set-Cookie": clearSessionCookie() });
 });
 
 register("GET", "/api/session", async ({ request }) => {
   const session = await authenticate(request);
   if (!session) throw new ApiError(401, "请先登录。");
-  return jsonOk({ user: publicUser(session.user), csrfToken: session.csrf });
+  return jsonOk({ user: publicUser(session.user), csrfToken: session.csrf }, request);
 });
 
 register("GET", "/api/state", async ({ request }) => {
   const session = await requireLogin(request);
-  return jsonOk(await buildState(session));
+  return jsonOk(await buildState(session), request);
 });
 
 register("GET", "/api/deposit-addresses", async ({ request }) => {
   await requireLogin(request);
-  return jsonOk({ addresses: await publicDepositAddresses() });
+  return jsonOk({ addresses: await publicDepositAddresses() }, request);
 });
 
 // ---------------- 铸造 / 钱包 / 典藏 ----------------
@@ -196,7 +196,7 @@ register("POST", "/api/rounds", async ({ request, body }) => {
   });
 
   const round = await selectOne("rounds", [{ column: "id", operator: "eq", value: roundId }]);
-  return jsonOk({ round: publicRound(round!), ...result });
+  return jsonOk({ round: publicRound(round!), ...result }, request);
 });
 
 register("POST", "/api/wallet/deposit", async ({ request, body }) => {
@@ -232,7 +232,7 @@ register("POST", "/api/wallet/withdraw", async ({ request, body }) => {
   } catch (error) {
     throw mapRpcError(error);
   }
-  return jsonOk({ state: await buildState(session) });
+  return jsonOk({ state: await buildState(session) }, request);
 });
 
 register("POST", "/api/holdings", async ({ request, body }) => {
@@ -258,7 +258,7 @@ register("POST", "/api/holdings", async ({ request, body }) => {
     started_at: Math.floor(Date.now() / 1000),
     earned_units: 0,
   });
-  return jsonOk({ holdingId, state: await buildState(session), holding: serializeAdminHolding(created) });
+  return jsonOk({ holdingId, state: await buildState(session), holding: serializeAdminHolding(created) }, request);
 });
 
 register("PATCH", "/api/holdings/:id", async ({ request, route, body }) => {
@@ -269,14 +269,14 @@ register("PATCH", "/api/holdings/:id", async ({ request, route, body }) => {
   const holding = await selectOne("holdings", [{ column: "id", operator: "eq", value: holdingId }]);
   if (!holding || Number(holding["user_id"]) !== session.user.id) throw new ApiError(404, "典藏品不存在。");
   await updateRows("holdings", [{ column: "id", operator: "eq", value: holdingId }], { status });
-  return jsonOk(await buildState(session));
+  return jsonOk(await buildState(session), request);
 });
 
 register("POST", "/api/holdings/claim", async ({ request }) => {
   const session = await requireLogin(request);
   const claimed = await callRpc("claim_earnings", { p_user_id: session.user.id });
   const state = await buildState(session);
-  return jsonOk({ ...state, claimedUnits: Number(claimed) });
+  return jsonOk({ ...state, claimedUnits: Number(claimed) }, request);
 });
 
 // ---------------- 管理后台：聚合数据 ----------------
@@ -415,7 +415,7 @@ register("GET", "/api/admin/list", async ({ request, query }) => {
     items = rows.map((row) => serializeAudit({ ...row, admin: userMap.get(Number(row["admin_id"])) ?? "" }));
   }
 
-  return jsonOk(buildPage(items, meta));
+  return jsonOk(buildPage(items, meta), request);
 });
 
 // ---------------- 管理后台：用户 / 代理 ----------------
@@ -445,7 +445,7 @@ register("POST", "/api/admin/agents", async ({ request, body }) => {
     username,
     invitationCode: code,
   });
-  return jsonOk({ user: publicUser(created) });
+  return jsonOk({ user: publicUser(created) }, request);
 });
 
 register("POST", "/api/admin/users", async ({ request, body }) => {
@@ -485,7 +485,7 @@ register("POST", "/api/admin/users", async ({ request, body }) => {
     invitationCode: code,
     invitedBy: parentId,
   });
-  return jsonOk({ user: { ...publicUser(created), invitationCode: code } });
+  return jsonOk({ user: { ...publicUser(created), invitationCode: code } }, request);
 });
 
 register("PATCH", "/api/admin/users/:id", async ({ request, route, body }) => {
@@ -506,7 +506,7 @@ register("PATCH", "/api/admin/users/:id", async ({ request, route, body }) => {
   }
   await updateRows("users", [{ column: "id", operator: "eq", value: userId }], { status });
   await writeAudit(session.user.id, "user_status", { userId, status, reason: note });
-  return jsonOk({ ok: true });
+  return jsonOk({ ok: true }, request);
 });
 
 register("PATCH", "/api/admin/users/:id/invitation", async ({ request, route }) => {
@@ -517,7 +517,7 @@ register("PATCH", "/api/admin/users/:id/invitation", async ({ request, route }) 
   const code = await generateInvitationCode();
   await updateRows("users", [{ column: "id", operator: "eq", value: userId }], { invitation_code: code });
   await writeAudit(session.user.id, "invitation_regenerate", { userId, newCode: code });
-  return jsonOk({ invitationCode: code });
+  return jsonOk({ invitationCode: code }, request);
 });
 
 register("PATCH", "/api/admin/users/:id/balance", async ({ request, route, body }) => {
@@ -538,7 +538,7 @@ register("PATCH", "/api/admin/users/:id/balance", async ({ request, route, body 
       p_reason: note,
     });
     await writeAudit(session.user.id, "balance_adjust", { userId, deltaUnits: delta, reason: note });
-    return jsonOk({ ok: true, balanceUnits: Number(result) });
+    return jsonOk({ ok: true, balanceUnits: Number(result) }, request);
   } catch (error) {
     throw mapRpcError(error);
   }
@@ -576,7 +576,7 @@ register("PATCH", "/api/admin/rounds/:id/outcome", async ({ request, route, body
     forcedOutcome: outcome === "reset" ? null : outcome,
     reason,
   });
-  return jsonOk({ ok: true });
+  return jsonOk({ ok: true }, request);
 });
 
 register("PATCH", "/api/admin/rounds/:id/risk", async ({ request, route, body }) => {
@@ -600,7 +600,7 @@ register("PATCH", "/api/admin/rounds/:id/risk", async ({ request, route, body })
     flagged,
     reason: flagged ? note : "管理员清除风险标记",
   });
-  return jsonOk({ ok: true });
+  return jsonOk({ ok: true }, request);
 });
 
 // ---------------- 管理后台：钱包 / 池 / 礼物 / 典藏 ----------------
@@ -637,7 +637,7 @@ register("PATCH", "/api/admin/wallet-requests/:id", async ({ request, route, bod
       amountUnits: Number(request["amount_units"]),
       reason: note,
     });
-    return jsonOk({ ok: true, status });
+    return jsonOk({ ok: true, status }, request);
   } catch (error) {
     throw mapRpcError(error);
   }
@@ -667,7 +667,7 @@ register("PATCH", "/api/admin/pools/:level", async ({ request, route, body }) =>
     level, minimumUnits: minimum, entryUnits: entry, durationSeconds: duration,
     winProbabilityBp: probability, profitPercent: profit, enabled,
   });
-  return jsonOk({ ok: true });
+  return jsonOk({ ok: true }, request);
 });
 
 register("PUT", "/api/admin/gifts/:slug", async ({ request, route, body }) => {
@@ -688,7 +688,7 @@ register("PUT", "/api/admin/gifts/:slug", async ({ request, route, body }) => {
     await insertRow("gifts", { slug, name, english, category, active: 1 });
   }
   await writeAudit(session.user.id, "gift_upsert", { slug, name, english, category });
-  return jsonOk({ ok: true });
+  return jsonOk({ ok: true }, request);
 });
 
 register("PATCH", "/api/admin/gifts/:slug/status", async ({ request, route, body }) => {
@@ -700,7 +700,7 @@ register("PATCH", "/api/admin/gifts/:slug/status", async ({ request, route, body
   if (!gift) throw new ApiError(404, "礼物不存在。");
   await updateRows("gifts", [{ column: "slug", operator: "eq", value: slug }], { active: active ? 1 : 0 });
   await writeAudit(session.user.id, "gift_status", { slug, active });
-  return jsonOk({ ok: true });
+  return jsonOk({ ok: true }, request);
 });
 
 register("DELETE", "/api/admin/holdings/:id", async ({ request, route }) => {
@@ -714,7 +714,7 @@ register("DELETE", "/api/admin/holdings/:id", async ({ request, route }) => {
     holdingId,
     slug: String(holding["slug"]),
   });
-  return jsonOk({ ok: true });
+  return jsonOk({ ok: true }, request);
 });
 
 // ---------------- 管理后台：充值地址 ----------------
@@ -722,7 +722,7 @@ register("DELETE", "/api/admin/holdings/:id", async ({ request, route }) => {
 register("GET", "/api/admin/deposit-addresses", async ({ request }) => {
   await requireAdmin(request);
   const rows = await selectRows("deposit_addresses", [], { order: "sort_order.asc,id.asc" });
-  return jsonOk({ addresses: rows.map((row) => serializeAddress(row, true)) });
+  return jsonOk({ addresses: rows.map((row) => serializeAddress(row, true)) }, request);
 });
 
 register("POST", "/api/admin/deposit-addresses", async ({ request, body }) => {
@@ -744,7 +744,7 @@ register("POST", "/api/admin/deposit-addresses", async ({ request, body }) => {
   await writeAudit(session.user.id, "deposit_address_create", {
     id: Number(created["id"]), label, address, active: active === 1,
   });
-  return jsonOk({ address: { ...serializeAddress(created, true) } });
+  return jsonOk({ address: { ...serializeAddress(created, true) } }, request);
 });
 
 register("PATCH", "/api/admin/deposit-addresses/:id", async ({ request, route, body }) => {
@@ -765,7 +765,7 @@ register("PATCH", "/api/admin/deposit-addresses/:id", async ({ request, route, b
   });
   await writeAudit(session.user.id, "deposit_address_update", { id, label, address, active: active === 1 });
   const updated = await selectOne("deposit_addresses", [{ column: "id", operator: "eq", value: id }]);
-  return jsonOk({ address: serializeAddress(updated, true) });
+  return jsonOk({ address: serializeAddress(updated, true) }, request);
 });
 
 register("PATCH", "/api/admin/deposit-addresses/:id/status", async ({ request, route, body }) => {
@@ -777,7 +777,7 @@ register("PATCH", "/api/admin/deposit-addresses/:id/status", async ({ request, r
   if (!record) throw new ApiError(404, "充值地址不存在。");
   await updateRows("deposit_addresses", [{ column: "id", operator: "eq", value: id }], { active: active ? 1 : 0 });
   await writeAudit(session.user.id, "deposit_address_status", { id, active });
-  return jsonOk({ ok: true });
+  return jsonOk({ ok: true }, request);
 });
 
 register("DELETE", "/api/admin/deposit-addresses/:id", async ({ request, route }) => {
@@ -789,7 +789,7 @@ register("DELETE", "/api/admin/deposit-addresses/:id", async ({ request, route }
   await writeAudit(session.user.id, "deposit_address_delete", {
     id, label: String(record["label"]), address: String(record["address"]),
   });
-  return jsonOk({ ok: true });
+  return jsonOk({ ok: true }, request);
 });
 
 // ---------------------------------------------------------------------
@@ -847,13 +847,13 @@ Deno.serve(async (request: Request): Promise<Response> => {
         if (tokens.length !== parts.length) return false;
         return tokens.every((token, index) => token.startsWith(":") || token === parts[index]);
       });
-      if (!fallback) return jsonError(404, "接口不存在。");
+      if (!fallback) return jsonError(404, "接口不存在。", request);
       return await fallback.handler({ request, route, body, query });
     }
     return await match.handler({ request, route, body, query });
   } catch (error) {
-    if (error instanceof ApiError) return jsonError(error.status, error.message);
+    if (error instanceof ApiError) return jsonError(error.status, error.message, request);
     console.error("[gram] 未处理异常:", error);
-    return jsonError(500, "服务暂时无法处理请求。");
+    return jsonError(500, "服务暂时无法处理请求。", request);
   }
 });
