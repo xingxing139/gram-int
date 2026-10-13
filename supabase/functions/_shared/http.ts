@@ -11,7 +11,7 @@ export class ApiError extends Error {
 }
 
 // CORS：当前端用 credentials: "include" 跨站携带 Cookie 时，规范禁止
-# Access-Control-Allow-Origin: *，必须回显具体 Origin 并显式声明允许凭证。
+// Access-Control-Allow-Origin: *，必须回显具体 Origin 并显式声明允许凭证。
 function corsHeaders(request: Request | null): Record<string, string> {
   const origin = request?.headers.get("Origin") ?? "*";
   return {
