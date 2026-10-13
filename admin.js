@@ -95,19 +95,33 @@ function adminUrlCandidates(path) {
 }
 
 async function doAdminRequest(target, base, method, headers, options) {
-  const response = await fetch(target, {
-    method,
-    credentials: base ? "include" : "same-origin",
-    headers,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
-  });
+  let response;
+  try {
+    response = await fetch(target, {
+      method,
+      credentials: base ? "include" : "same-origin",
+      headers,
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    });
+  } catch (error) {
+    // fetch 本身抛错 = 网络/CORS/超时，调用方据此换地址重试
+    throw error;
+  }
   let result = {};
   try {
     result = await response.json();
   } catch (error) {
-    if (response.ok) throw new Error("服务器返回了无法读取的数据。");
+    if (response.ok) {
+      const wrapped = new Error("服务器返回了无法读取的数据。");
+      wrapped.isHttpError = true;
+      throw wrapped;
+    }
   }
-  if (!response.ok) throw new Error(result.error || `服务器请求失败（${response.status}）。`);
+  if (!response.ok) {
+    const wrapped = new Error(result.error || `服务器请求失败（${response.status}）。`);
+    wrapped.isHttpError = true;
+    throw wrapped;
+  }
   if (result.csrfToken) csrfToken = result.csrfToken;
   return result;
 }
@@ -124,8 +138,9 @@ async function request(path, options = {}) {
     try {
       return await doAdminRequest(target, base, method, headers, options);
     } catch (error) {
-      // 服务端已给出明确应答时直接抛出，不再换地址重试
-      if (/服务器请求失败|服务器返回了/.test(error.message)) throw error;
+      // 服务端已给出业务应答（含 401 未登录、404 等）必须原样抛出，绝不换地址重试；
+      // 只有 fetch 本身抛出的网络级错误才尝试下一个候选地址。
+      if (error && error.isHttpError) throw error;
       lastError = error;
     }
   }
@@ -752,8 +767,17 @@ function renderDashboard(data, user) {
 
 async function loadDashboard(user) {
   const role = user && user.role;
-  const data = await request(role === "agent" ? "/api/agent" : "/api/admin");
-  renderDashboard(data, user);
+  const path = role === "agent" ? "/api/agent" : "/api/admin";
+  try {
+    const data = await request(path);
+    renderDashboard(data, user);
+  } catch (error) {
+    // 登录刚成功却拿不到会话，说明浏览器没有保留跨站 Cookie
+    if (error.message === "请先登录。") {
+      throw new Error("登录态未被浏览器保留（跨站 Cookie 被拦截）。请改用本地后台 http://127.0.0.1:9292/admin.html ，或在浏览器设置中允许第三方 Cookie。");
+    }
+    throw error;
+  }
 }
 
 document.querySelector("[data-admin-login-form]").addEventListener("submit", async (event) => {
