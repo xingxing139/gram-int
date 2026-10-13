@@ -70,12 +70,19 @@ let depositAddresses = [];
 const adminOnlyModules = ["create-users", "agents", "addresses", "pools", "gifts", "audit"];
 const roleLabels = { admin: "管理员", agent: "代理", user: "用户" };
 
-/* 后端寻址：默认同源 /api；部署到 Supabase 时在 admin.html 里设置
- * window.GRAM_API_BASE = "https://<项目>.supabase.co/functions/v1/api" */
+/* 后端寻址：本地/局域网走同源后端（ruby server.rb），公网走 Supabase。
+   如需强制指定，可在页面加载前设置 window.GRAM_API_BASE。 */
+const SUPABASE_FN = "https://gyjqoxbpjlrvemoybktq.supabase.co/functions/v1/api";
+
 function adminApiBase() {
-  const configured = window.GRAM_API_BASE;
-  if (configured) return String(configured).replace(/\/+$/, "");
-  return "";
+  if (window.GRAM_API_BASE !== undefined) {
+    return String(window.GRAM_API_BASE).replace(/\/+$/, "");
+  }
+  const host = window.location.hostname;
+  const isLocal = host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" ||
+    host === "[::1]" || /^192\.168\./.test(host) || /^10\./.test(host) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host);
+  return isLocal ? "" : SUPABASE_FN;
 }
 async function request(path, options = {}) {
   const method = options.method || "GET";

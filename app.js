@@ -22,10 +22,19 @@ let lastStateSyncAt = 0;
  * 部署到 Supabase 时，在 supabase.js 中设置 window.GRAM_API_BASE 即可，
  * 例如 window.GRAM_API_BASE = "https://<项目>.supabase.co/functions/v1/api"；
  * 所有业务调用点无需任何改动。 */
+/* 后端寻址：本地/局域网走同源后端（ruby server.rb），公网走 Supabase。
+   如需强制指定，可在页面加载前设置 window.GRAM_API_BASE。 */
+const SUPABASE_FN = "https://gyjqoxbpjlrvemoybktq.supabase.co/functions/v1/api";
+
 function apiBase() {
-  const configured = window.GRAM_API_BASE;
-  if (configured) return String(configured).replace(/\/+$/, "");
-  return "";
+  if (window.GRAM_API_BASE !== undefined) {
+    return String(window.GRAM_API_BASE).replace(/\/+$/, "");
+  }
+  const host = window.location.hostname;
+  const isLocal = host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" ||
+    host === "[::1]" || /^192\.168\./.test(host) || /^10\./.test(host) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host);
+  return isLocal ? "" : SUPABASE_FN;
 }
 
 function apiUrl(path) {
