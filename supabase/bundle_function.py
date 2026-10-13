@@ -59,6 +59,12 @@ def bundle(entry, seen=None):
 
     code = named_import.sub(expand, code)
     code = side_effect.sub(expand, code)
+    # 必须去掉 export：Supabase Edge Function 不接受顶层 export 声明，
+    # 一旦保留函数直接 BOOT_ERROR，浏览器只会看到 Failed to fetch。
+    # 其中 `export { A, B };` 这类重导出要整行删除——只删 export 关键字
+    # 会剩下 `{ A, B };` 裸块，引用未定义变量同样导致启动崩溃。
+    code = re.sub(r"(?m)^export\s*\{[^}]*\}\s*;?[ \t]*$", "", code)
+    code = re.sub(r"(?m)^export\s+", "", code)
     return code
 
 

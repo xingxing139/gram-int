@@ -85,10 +85,10 @@ function register(method: string, pattern: string, handler: Handler): void {
 
 // ---------------- 公开 / 认证 ----------------
 
-register("GET", "/api/health", () =>
+register("GET", "/api/health", ({ request }) =>
   jsonOk({ status: "ok", mode: "supabase", realAssets: true }, request));
 
-register("POST", "/api/register", async ({ body }) => {
+register("POST", "/api/register", async ({ request, body }) => {
   const username = String(body["username"] ?? "").trim();
   const password = String(body["password"] ?? "");
   const normalized = username.toLowerCase();
