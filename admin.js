@@ -84,13 +84,17 @@ function adminApiBase() {
     /^172\.(1[6-9]|2\d|3[01])\./.test(host);
   return isLocal ? "" : SUPABASE_FN;
 }
-async function request(path, options = {}) {
-  const method = options.method || "GET";
-  const headers = { Accept: "application/json" };
-  if (options.body !== undefined) headers["Content-Type"] = "application/json";
-  if (["POST", "PATCH", "PUT", "DELETE"].includes(method) && csrfToken) headers["X-CSRF-Token"] = csrfToken;
+/* 候选地址：边缘运行时会剥掉 /functions/v1/api 前缀，同一接口可能对应
+   两种 URL 形态，逐个尝试，避免因前缀差异整体失败。 */
+function adminUrlCandidates(path) {
   const base = adminApiBase();
-  const target = base ? base + path.replace(/^\/api/, "") : path;
+  if (!base) return [path];
+  const first = base + path.replace(/^\/api/, "");
+  const second = base + path;
+  return first === second ? [first] : [first, second];
+}
+
+async function doAdminRequest(target, base, method, headers, options) {
   const response = await fetch(target, {
     method,
     credentials: base ? "include" : "same-origin",
@@ -106,6 +110,26 @@ async function request(path, options = {}) {
   if (!response.ok) throw new Error(result.error || `服务器请求失败（${response.status}）。`);
   if (result.csrfToken) csrfToken = result.csrfToken;
   return result;
+}
+
+async function request(path, options = {}) {
+  const method = options.method || "GET";
+  const headers = { Accept: "application/json" };
+  if (options.body !== undefined) headers["Content-Type"] = "application/json";
+  if (["POST", "PATCH", "PUT", "DELETE"].includes(method) && csrfToken) headers["X-CSRF-Token"] = csrfToken;
+  const base = adminApiBase();
+  const candidates = adminUrlCandidates(path);
+  let lastError = null;
+  for (const target of candidates) {
+    try {
+      return await doAdminRequest(target, base, method, headers, options);
+    } catch (error) {
+      // 服务端已给出明确应答时直接抛出，不再换地址重试
+      if (/服务器请求失败|服务器返回了/.test(error.message)) throw error;
+      lastError = error;
+    }
+  }
+  throw new Error(`网络请求失败（${candidates[0]}）：${lastError ? lastError.message : "unknown"}`);
 }
 
 function setFeedback(message, type = "error") {
